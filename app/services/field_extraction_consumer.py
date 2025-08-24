@@ -22,6 +22,8 @@ class FieldExtractionConsumer:
         self.consume_task = None
         self.topic = "field.extraction"
         self.group_id = "field_extraction_consumer_group"
+        # 限制并发处理数量，避免阻塞事件循环
+        self.semaphore = asyncio.Semaphore(5)  # 最多同时处理5个文件
         logger.info(f"Field extraction consumer initialized for topic: {self.topic}")
     
     async def start_async_consumer(self):
@@ -92,8 +94,9 @@ class FieldExtractionConsumer:
                                 if kafka_message.data.type == "field_extraction_job":
                                     logger.debug(f"Message validated successfully: {kafka_message.data}")
                                     
-                                    # 处理消息
-                                    await self._handle_message(kafka_message.data, message)
+                                    # 使用信号量控制并发数量，避免阻塞事件循环
+                                    asyncio.create_task(self._handle_message_with_semaphore(kafka_message.data, message))
+                                    logger.debug(f"Field extraction message queued for processing")
                                 else:
                                     logger.warning(f"Unexpected message type: {kafka_message.data.type}, expected field_extraction_job")
                                     continue
@@ -115,6 +118,11 @@ class FieldExtractionConsumer:
         except Exception as e:
             logger.error(f"Fatal error in consume loop: {e}")
     
+    async def _handle_message_with_semaphore(self, message_data: FieldExtractionJobMessage, raw_message: Any) -> None:
+        """使用信号量控制并发的消息处理"""
+        async with self.semaphore:
+            await self._handle_message(message_data, raw_message)
+    
     async def _handle_message(self, message_data: FieldExtractionJobMessage, raw_message: Any) -> None:
         """处理字段提取消息"""
         try:
@@ -128,31 +136,22 @@ class FieldExtractionConsumer:
             # 获取数据库会话
             db = next(get_db())
             try:
-                # 记录ProcessingMessage状态为consumed
-                processing_msg = ProcessingMessage(
-                    job_id=job_id,
-                    task_id=task_id,
-                    file_metadata_id=file_id,
-                    topic=self.topic,
-                    payload=message_data.model_dump(),
-                    status="consumed",
-                    consumed_at=datetime.now()
-                )
-                db.add(processing_msg)
-                db.commit()
+                # 1. 标记消息已被消费
+                from app.services.processing_message_updater import ProcessingMessageUpdater
                 
-                # 更新ProcessingMessage状态为processing
-                processing_msg.status = "processing"
-                processing_msg.updated_at = datetime.now()
-                db.commit()
+                if not ProcessingMessageUpdater.mark_consumed(db, job_id):
+                    logger.warning(f"Failed to mark job {job_id} as consumed")
                 
-                # 处理字段提取
+                # 2. 标记消息正在处理中
+                if not ProcessingMessageUpdater.mark_processing(db, job_id):
+                    logger.warning(f"Failed to mark job {job_id} as processing")
+                
+                # 3. 处理字段提取
                 result = await self._handle_field_extraction_job(message_data, db)
                 
-                # 记录ProcessingMessage状态为completed
-                processing_msg.status = "completed"
-                processing_msg.completed_at = datetime.now()
-                db.commit()
+                # 4. 标记处理完成
+                if not ProcessingMessageUpdater.mark_completed(db, job_id):
+                    logger.warning(f"Failed to mark job {job_id} as completed")
                 
                 logger.info(f"Field extraction job {job_id} completed successfully")
                 
@@ -163,19 +162,11 @@ class FieldExtractionConsumer:
             logger.error(f"Failed to process field extraction message: {e}")
             # 记录ProcessingMessage状态为failed
             try:
+                from app.services.processing_message_updater import ProcessingMessageUpdater
+                
                 db = next(get_db())
-                processing_msg = ProcessingMessage(
-                    job_id=message_data.job_id,
-                    task_id=message_data.task_id,
-                    file_metadata_id=message_data.file_id,
-                    topic=self.topic,
-                    payload=message_data.model_dump(),
-                    status="failed",
-                    error=str(e),
-                    attempts=1
-                )
-                db.add(processing_msg)
-                db.commit()
+                if not ProcessingMessageUpdater.mark_failed(db, message_data.job_id, str(e), attempts=1):
+                    logger.warning(f"Failed to mark job {message_data.job_id} as failed")
                 db.close()
             except Exception as db_error:
                 logger.error(f"Failed to record error in ProcessingMessage: {db_error}")
@@ -193,8 +184,8 @@ class FieldExtractionConsumer:
             if not file_content:
                 raise Exception(f"Failed to get file content from MinIO: {s3_key}")
             
-            # 调用Gemini API提取字段（同时进行分类）
-            extraction_result = gemini_service.extract_fields(
+            # 调用Gemini API提取字段（同时进行分类）- 确保是异步调用
+            extraction_result = await gemini_service.extract_fields(
                 file_content=file_content,
                 file_type=file_type,
                 filename=filename

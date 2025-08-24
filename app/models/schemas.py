@@ -35,6 +35,7 @@ class FileUploadResponse(BaseModel):
     filename: str
     size: int
     status: str
+    details: Optional[Dict[str, Any]] = Field(None, description="处理详情")
 
 class FileMetadataResponse(BaseModel):
     id: int

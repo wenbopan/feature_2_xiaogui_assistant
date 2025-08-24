@@ -25,8 +25,8 @@ class Settings(BaseSettings):
     # PostgreSQL 配置（当database_url为空时使用）
     postgres_host: str = "localhost"
     postgres_port: int = 5432
-    postgres_user: str = "postgres"
-    postgres_password: str = "password"
+    postgres_user: str = "panwenbo"  # 改为当前用户
+    postgres_password: str = ""  # 当前用户通常不需要密码
     postgres_db: str = "legal_docs_dev"
     
     # 应用配置

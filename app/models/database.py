@@ -99,6 +99,7 @@ class FileClassification(Base):
     confidence = Column(Float, nullable=False, comment="置信度")
     final_filename = Column(String(255), nullable=False, comment="重命名后的文件名")
     classification_method = Column(String(50), nullable=False, comment="分类方法")
+    gemini_response = Column(JSON, nullable=True, comment="Gemini AI的原始响应")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # 关系
@@ -120,6 +121,20 @@ class FieldExtraction(Base):
     
     # 关系
     file_metadata = relationship("FileMetadata", back_populates="field_extractions")
+
+class FileExtractionFailure(Base):
+    """文件解压失败记录表"""
+    __tablename__ = "file_extraction_failures"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id"), nullable=False, comment="关联的任务ID")
+    filename = Column(String(255), nullable=False, comment="原始文件名")
+    error = Column(Text, nullable=False, comment="失败原因")
+    file_size = Column(Integer, nullable=True, comment="文件大小(字节)")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # 关系
+    task = relationship("Task")
 
 class ExtractionTask(Base):
     """字段提取任务表"""

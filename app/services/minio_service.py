@@ -139,12 +139,19 @@ class MinIOService:
     def get_file_content(self, s3_key: str) -> Optional[bytes]:
         """获取文件内容"""
         try:
+            if not self.client:
+                logger.error("MinIO client not initialized")
+                return None
+                
             response = self.client.get_object(self.bucket_name, s3_key)
             content = response.read()
             logger.info(f"Successfully read content from {s3_key}")
             return content
         except S3Error as e:
             logger.error(f"Failed to read content from {s3_key}: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error reading content from {s3_key}: {e}")
             return None
     
     def delete_file(self, s3_key: str) -> bool:

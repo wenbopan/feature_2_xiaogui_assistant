@@ -108,16 +108,10 @@ class KafkaService:
                     "data": message
                 }
             
-            # 在当前事件循环中发送到Kafka
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # 如果在异步上下文中，创建任务
-                asyncio.create_task(self._send_message(topic, message_with_metadata, key))
-            else:
-                # 如果在同步上下文中，运行事件循环
-                loop.run_until_complete(self._send_message(topic, message_with_metadata, key))
+            # 异步发送消息，不等待完成
+            asyncio.create_task(self._send_message(topic, message_with_metadata, key))
             
-            logger.info(f"Message published to {topic}: {message.get('type', 'unknown')}")
+            logger.info(f"Message queued for {topic}: {message.get('type', 'unknown')}")
             return True
             
         except Exception as e:

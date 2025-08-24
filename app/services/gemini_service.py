@@ -4,6 +4,7 @@ import logging
 from typing import Optional, Dict, Any, List
 import json
 import base64
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +24,37 @@ class GeminiService:
         
         logger.info("Gemini service initialized successfully")
     
-    def classify_file(self, file_content: bytes, file_type: str, filename: str) -> Dict[str, Any]:
-        """分类文件"""
+    async def classify_file(self, file_content: bytes, file_type: str, filename: str) -> Dict[str, Any]:
+        """分类文件 - 异步版本"""
+        try:
+            # 使用asyncio.to_thread来避免阻塞事件循环，并添加超时
+            loop = asyncio.get_event_loop()
+            result = await asyncio.wait_for(
+                loop.run_in_executor(None, self._classify_file_sync, file_content, file_type, filename),
+                timeout=30.0  # 30秒超时
+            )
+            return result
+        except asyncio.TimeoutError:
+            logger.error(f"Gemini API call timeout for file: {filename}")
+            return {
+                "category": "未识别",
+                "confidence": 0.0,
+                "reason": "Gemini API调用超时",
+                "key_info": "",
+                "raw_response": None
+            }
+        except Exception as e:
+            logger.error(f"Async classification failed: {e}")
+            return {
+                "category": "未识别",
+                "confidence": 0.0,
+                "reason": f"异步分类失败: {str(e)}",
+                "key_info": "",
+                "raw_response": None
+            }
+    
+    def _classify_file_sync(self, file_content: bytes, file_type: str, filename: str) -> Dict[str, Any]:
+        """分类文件 - 同步版本（在executor中运行）"""
         try:
             # 构建分类提示词
             prompt = f"""
@@ -117,8 +147,41 @@ class GeminiService:
                 "key_info": ""
             }
     
-    def extract_fields(self, file_content: bytes, file_type: str, filename: str) -> Dict[str, Any]:
-        """提取字段 - 同时进行文件分类和字段提取"""
+    async def extract_fields(self, file_content: bytes, file_type: str, filename: str) -> Dict[str, Any]:
+        """提取字段 - 同时进行文件分类和字段提取 - 异步版本"""
+        try:
+            # 使用asyncio.to_thread来避免阻塞事件循环，并添加超时
+            loop = asyncio.get_event_loop()
+            result = await asyncio.wait_for(
+                loop.run_in_executor(None, self._extract_fields_sync, file_content, file_type, filename),
+                timeout=30.0  # 30秒超时
+            )
+            return result
+        except asyncio.TimeoutError:
+            logger.error(f"Gemini API call timeout for field extraction from file: {filename}")
+            return {
+                "category": "未识别",
+                "classification_confidence": 0.0,
+                "classification_reason": "Gemini API调用超时",
+                "extraction_data": {},
+                "missing_fields": [],
+                "extraction_confidence": 0.0,
+                "error": "Gemini API调用超时"
+            }
+        except Exception as e:
+            logger.error(f"Async field extraction failed: {e}")
+            return {
+                "category": "未识别",
+                "classification_confidence": 0.0,
+                "classification_reason": f"异步字段提取失败: {str(e)}",
+                "extraction_data": {},
+                "missing_fields": [],
+                "extraction_confidence": 0.0,
+                "error": f"异步字段提取失败: {str(e)}"
+            }
+    
+    def _extract_fields_sync(self, file_content: bytes, file_type: str, filename: str) -> Dict[str, Any]:
+        """提取字段 - 同时进行文件分类和字段提取 - 同步版本（在executor中运行）"""
         try:
             # 构建提取提示词 - 同时要求分类和字段提取
             prompt = f"""
@@ -220,15 +283,15 @@ class GeminiService:
             return result
             
         except Exception as e:
-            logger.error(f"Failed to extract fields from {filename}: {e}")
+            logger.error(f"Field extraction failed for file {filename}: {e}")
             return {
                 "category": "未识别",
                 "classification_confidence": 0.0,
-                "classification_reason": f"提取失败: {str(e)}",
+                "classification_reason": f"字段提取失败: {str(e)}",
                 "extraction_data": {},
                 "missing_fields": [],
                 "extraction_confidence": 0.0,
-                "error": f"提取失败: {str(e)}"
+                "error": f"字段提取失败: {str(e)}"
             }
     
     def _get_field_config(self, category: str) -> Optional[Dict[str, Any]]:

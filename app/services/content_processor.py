@@ -105,7 +105,8 @@ class ContentProcessor:
                         category=classification_result["category"],
                         confidence=classification_result["confidence"],
                         final_filename=final_filename,
-                        classification_method=classification_result.get("method", "gemini")
+                        classification_method=classification_result.get("method", "gemini"),
+                        gemini_response=classification_result.get("raw_response")
                     )
                     
                     db.add(classification)
@@ -162,23 +163,24 @@ class ContentProcessor:
         try:
             # 所有文件类型都直接使用Gemini视觉模型进行分类
             # 传递原始二进制内容，让Gemini理解整个文件
-            classification_result = gemini_service.classify_file(
+            classification_result = await gemini_service.classify_file(
                 file_content, 
                 file_metadata.file_type, 
                 file_metadata.original_filename
             )
             
             # 记录Gemini的原始响应（只存储raw_response部分）
-            try:
-                if isinstance(classification_result, dict) and "raw_response" in classification_result:
-                    # 只存储Gemini API的原始文本响应，不存储文件内容
-                    raw_response = classification_result["raw_response"]
-                    if raw_response and isinstance(raw_response, str):
-                        file_metadata.gemini_response = {"raw_response": raw_response}
-                        db.commit()
-                        logger.info(f"Stored Gemini response for {file_metadata.original_filename}")
-            except Exception as e:
-                logger.warning(f"Failed to store gemini raw response: {e}")
+            # 注意：gemini_response现在存储在FileClassification表中，这里不再需要存储到FileMetadata
+            # try:
+            #     if isinstance(classification_result, dict) and "raw_response" in classification_result:
+            #         # 只存储Gemini API的原始文本响应，不存储文件内容
+            #         raw_response = classification_result["raw_response"]
+            #         if raw_response and isinstance(raw_response, str):
+            #             file_metadata.gemini_response = {"raw_response": raw_response}
+            #             db.commit()
+            #             logger.info(f"Stored Gemini response for {file_metadata.original_filename}")
+            # except Exception as e:
+            #     logger.warning(f"Failed to store gemini raw response: {e}")
             
             return classification_result
             

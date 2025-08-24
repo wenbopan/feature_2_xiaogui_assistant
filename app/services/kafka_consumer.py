@@ -24,6 +24,8 @@ class KafkaConsumerService:
         self.consumer = None
         self.running = False
         self.consume_task = None
+        # 限制并发处理数量，避免阻塞事件循环
+        self.semaphore = asyncio.Semaphore(5)  # 最多同时处理5个文件
     
     async def start_async_consumer(self):
         """异步启动消费者"""
@@ -108,8 +110,9 @@ class KafkaConsumerService:
                             # 处理文件处理任务
                             if topic == "file.processing":
                                 logger.debug(f"Processing file.processing message...")
-                                await self._handle_processing_job(message_data, message)
-                                logger.debug(f"File.processing message handled successfully")
+                                # 使用信号量控制并发数量
+                                asyncio.create_task(self._handle_processing_job_with_semaphore(message_data, message))
+                                logger.debug(f"File.processing message queued for processing")
                             else:
                                 logger.warning(f"Unknown topic: {topic}")
                                 logger.debug(f"Skipping unknown topic message")
@@ -128,6 +131,11 @@ class KafkaConsumerService:
         finally:
             if self.consumer:
                 await self.consumer.stop()
+    
+    async def _handle_processing_job_with_semaphore(self, message_data: Dict[str, Any], raw_message=None):
+        """使用信号量控制并发的处理任务"""
+        async with self.semaphore:
+            await self._handle_processing_job(message_data, raw_message)
     
     async def _handle_processing_job(self, message_data: Dict[str, Any], raw_message=None):
         """处理内容处理任务"""
@@ -157,21 +165,24 @@ class KafkaConsumerService:
             logger.debug("Database session acquired successfully")
             
             try:
-                # 记录消息已消费 / processing 中
+                # 1. 标记消息已被消费
                 try:
-                    from datetime import datetime
-                    from app.models.database import ProcessingMessage
-                    pm = db.query(ProcessingMessage).filter(ProcessingMessage.job_id == job_id).first()
-                    if pm is not None:
-                        pm.status = "processing"
-                        pm.attempts = (pm.attempts or 0) + 1
-                        if raw_message is not None:
-                            pm.partition = getattr(raw_message, "partition", None)
-                            pm.offset = getattr(raw_message, "offset", None)
-                        pm.consumed_at = datetime.now()
-                        db.commit()
+                    from app.services.processing_message_updater import ProcessingMessageUpdater
+                    
+                    # 获取Kafka元信息
+                    partition = getattr(raw_message, "partition", None) if raw_message else None
+                    offset = getattr(raw_message, "offset", None) if raw_message else None
+                    
+                    # 标记为consumed状态
+                    if not ProcessingMessageUpdater.mark_consumed(db, job_id, partition, offset):
+                        logger.warning(f"Failed to mark job {job_id} as consumed")
+                    
+                    # 标记为processing状态
+                    if not ProcessingMessageUpdater.mark_processing(db, job_id, attempts=1):
+                        logger.warning(f"Failed to mark job {job_id} as processing")
+                        
                 except Exception as meta_err:
-                    logger.warning(f"Failed to update processing message metadata to processing: {meta_err}")
+                    logger.warning(f"Failed to update processing message metadata: {meta_err}")
 
                 # 处理内容任务
                 logger.debug(f"Calling content_processor.process_content_job...")
@@ -179,17 +190,20 @@ class KafkaConsumerService:
                 logger.info(f"Content processing job {job_id} completed: {result}")
                 logger.debug(f"Processing result details: {result}")
 
-                # 标记完成
+                # 2. 标记处理完成或失败
                 try:
-                    from datetime import datetime
-                    from app.models.database import ProcessingMessage
-                    pm = db.query(ProcessingMessage).filter(ProcessingMessage.job_id == job_id).first()
-                    if pm is not None:
-                        pm.status = "completed" if result.get("status") == "completed" else "failed"
-                        pm.completed_at = datetime.now()
-                        if result.get("status") != "completed":
-                            pm.error = str(result.get("error"))
-                        db.commit()
+                    from app.services.processing_message_updater import ProcessingMessageUpdater
+                    
+                    if result.get("status") == "completed":
+                        # 标记为completed状态
+                        if not ProcessingMessageUpdater.mark_completed(db, job_id):
+                            logger.warning(f"Failed to mark job {job_id} as completed")
+                    else:
+                        # 标记为failed状态
+                        error_msg = str(result.get("error", "Unknown error"))
+                        if not ProcessingMessageUpdater.mark_failed(db, job_id, error_msg):
+                            logger.warning(f"Failed to mark job {job_id} as failed")
+                            
                 except Exception as meta_err:
                     logger.warning(f"Failed to finalize processing message metadata: {meta_err}")
                 
