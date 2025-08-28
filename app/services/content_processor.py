@@ -85,82 +85,51 @@ class ContentProcessor:
                 logger.error(f"Failed to get file content for {file_metadata.s3_key}")
                 return {"success": False, "error": "Failed to get file content"}
             
-            # 读取文件内容
-            content_result = self._read_file_content(file_metadata, file_content, db)
+            # 直接分类文件，内容处理在分类阶段进行
+            classification_result = await self._classify_file(file_metadata, file_content, db)
             
-            # 分类文件
-            if content_result["success"]:
-                classification_result = await self._classify_file(file_metadata, file_content, db)
+            # 生成逻辑重命名文件名
+            if classification_result["category"] != "未识别":
+                logical_filename = self._generate_logical_filename(
+                    task.organize_date, task.project_name, classification_result["category"], file_metadata.original_filename
+                )
                 
-                # 生成重命名文件名
-                if classification_result["category"] != "未识别":
-                    final_filename = self._generate_final_filename(
-                        task.id, task.organize_date, task.project_name, classification_result["category"], file_metadata.original_filename
-                    )
-                    
-                    # 创建分类记录
-                    classification = FileClassification(
-                        task_id=task.id,
-                        file_metadata_id=file_metadata.id,
-                        category=classification_result["category"],
-                        confidence=classification_result["confidence"],
-                        final_filename=final_filename,
-                        classification_method=classification_result.get("method", "gemini"),
-                        gemini_response=classification_result.get("raw_response")
-                    )
-                    
-                    db.add(classification)
-                    db.commit()
-                    
-                    # 将文件移动到重命名目录
-                    renamed_s3_key = f"tasks/{task.id}/renamed/{final_filename}"
-                    if minio_service.copy_file(file_metadata.s3_key, renamed_s3_key):
-                        logger.info(f"File renamed: {file_metadata.original_filename} -> {final_filename}")
-                        return {"success": True, "final_filename": final_filename}
-                    else:
-                        logger.error(f"Failed to copy file to renamed directory: {file_metadata.original_filename}")
-                        return {"success": False, "error": "Failed to copy file"}
-                else:
-                    # 未识别的文件移动到未识别目录
-                    unrecognized_s3_key = f"tasks/{task.id}/unrecognized/{file_metadata.original_filename}"
-                    if minio_service.copy_file(file_metadata.s3_key, unrecognized_s3_key):
-                        logger.info(f"File moved to unrecognized: {file_metadata.original_filename}")
-                        return {"success": True, "category": "unrecognized"}
-                    else:
-                        logger.error(f"Failed to move file to unrecognized directory: {file_metadata.original_filename}")
-                        return {"success": False, "error": "Failed to move file"}
-            
-            return {"success": False, "error": "Content reading failed"}
+                # 更新FileMetadata的逻辑文件名
+                file_metadata.logical_filename = logical_filename
+                
+                # 创建分类记录，同时保存final_filename
+                classification = FileClassification(
+                    task_id=task.id,
+                    file_metadata_id=file_metadata.id,
+                    category=classification_result["category"],
+                    confidence=classification_result["confidence"],
+                    final_filename=logical_filename,  # 保存到分类记录中
+                    classification_method=classification_result.get("method", "gemini"),
+                    gemini_response=classification_result.get("raw_response")
+                )
+                
+                db.add(classification)
+                db.commit()
+                
+                logger.info(f"File logically renamed: {file_metadata.original_filename} -> {logical_filename}")
+                return {"success": True, "logical_filename": logical_filename}
+            else:
+                # 未识别的文件 - 不重命名，只记录状态
+                logger.info(f"File classified as unrecognized: {file_metadata.original_filename}")
+                return {"success": True, "category": "unrecognized"}
             
         except Exception as e:
             logger.error(f"Failed to process file {file_metadata.original_filename}: {e}")
             return {"success": False, "error": str(e)}
     
-    def _read_file_content(self, file_metadata: FileMetadata, file_content: bytes, db: Session) -> Dict[str, Any]:
-        """读取文件内容 - 统一使用Gemini视觉模型"""
-        try:
-            # 所有文件类型都使用Gemini视觉模型处理
-            # 这里只是标记状态，实际内容处理在分类阶段进行
-            file_metadata.content_reading_status = "success"
-            file_metadata.content_reading_timestamp = datetime.now()
-            db.commit()
-            
-            return {"success": True, "content": "", "method": "gemini_vision"}
-                
-        except Exception as e:
-            logger.error(f"Failed to read file content: {e}")
-            file_metadata.content_reading_status = "failed"
-            file_metadata.content_reading_error = str(e)
-            file_metadata.content_reading_attempts += 1
-            db.commit()
-            
-            return {"success": False, "error": str(e)}
-    
-
+    # 移除不必要的_read_file_content函数，内容处理直接在分类阶段进行
     
     async def _classify_file(self, file_metadata: FileMetadata, file_content: bytes, db: Session) -> Dict[str, Any]:
         """分类文件 - 统一使用Gemini视觉模型"""
         try:
+            # Content reading status is now tracked in ProcessingMessage table
+            # No need to update FileMetadata for this
+            
             # 所有文件类型都直接使用Gemini视觉模型进行分类
             # 传递原始二进制内容，让Gemini理解整个文件
             classification_result = await gemini_service.classify_file(
@@ -186,6 +155,9 @@ class ContentProcessor:
             
         except Exception as e:
             logger.error(f"Classification failed: {e}")
+            # Error status is tracked in ProcessingMessage table
+            # No need to update FileMetadata for this
+            
             return {
                 "category": "未识别",
                 "confidence": 0.0,
@@ -193,8 +165,10 @@ class ContentProcessor:
                 "method": "failed"
             }
     
-    def _generate_final_filename(self, task_id: int, organize_date: str, project_name: str, category: str, original_filename: str) -> str:
-        """生成最终文件名"""
+    # 旧的_generate_final_filename函数已移除，替换为_generate_logical_filename
+    
+    def _generate_logical_filename(self, organize_date: str, project_name: str, category: str, original_filename: str) -> str:
+        """生成逻辑重命名文件名"""
         # 清理项目名称
         clean_project_name = project_name.replace(" ", "_").replace("/", "_").replace("\\", "_")
         
@@ -202,17 +176,12 @@ class ContentProcessor:
         file_ext = os.path.splitext(original_filename)[1]
         
         # 生成新文件名：整理时间-项目名称-分类名.扩展名
-        final_filename = f"{organize_date}-{clean_project_name}-{category}{file_ext}"
+        logical_filename = f"{organize_date}-{clean_project_name}-{category}{file_ext}"
         
-        # 检查文件名冲突，如果存在则添加序号
-        counter = 1
-        original_final_filename = final_filename
-        while minio_service.file_exists(f"tasks/{task_id}/renamed/{final_filename}"):
-            name_without_ext = os.path.splitext(original_final_filename)[0]
-            final_filename = f"{name_without_ext}_{counter:03d}{file_ext}"
-            counter += 1
+        # 注意：不再检查MinIO中的文件冲突，因为我们现在使用逻辑重命名
+        # 文件名冲突检查可以在数据库层面进行，或者通过添加时间戳/序号来避免
         
-        return final_filename
+        return logical_filename
     
     def _update_progress(self, task_id: int, stage: str, current: int, total: int):
         """更新进度"""

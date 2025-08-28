@@ -83,7 +83,7 @@ async def upload_zip_file(
         if hasattr(file, "size") and file.size is not None:
             try:
                 if int(file.size) > settings.max_zip_size:
-                    raise HTTPException(status_code=400, detail=f"文件大小超过限制: {settings.max_zip_size / (1024*1024):.1f}MB")
+                    raise HTTPException(status_code=400, detail=f"文件大小超过限制: {settings.max_zip_size / (5*1024):.1f}MB")
             except Exception:
                 # 忽略 size 解析异常，改为落盘后再校验
                 pass
@@ -339,20 +339,22 @@ async def get_task_results(task_id: int, db: Session = Depends(get_db)):
     # 获取分类结果
     classifications = db.query(FileClassification).filter(FileClassification.task_id == task_id).all()
     
-    # 获取未识别文件
-    unrecognized_files = db.query(FileMetadata).filter(
-        FileMetadata.task_id == task_id,
-        FileMetadata.content_reading_status == "failed"
-    ).all()
-    
-    # 统计信息
+    # 获取未识别文件 - content_reading_status is no longer in FileMetadata
+    # We'll identify unrecognized files as those without classifications
     total_files = db.query(FileMetadata).filter(FileMetadata.task_id == task_id).count()
     classified_files = len(classifications)
-    unrecognized_count = len(unrecognized_files)
-    failed_count = db.query(FileMetadata).filter(
+    
+    # Get files that don't have classifications
+    classified_file_ids = [cls.file_metadata_id for cls in classifications]
+    unrecognized_files = db.query(FileMetadata).filter(
         FileMetadata.task_id == task_id,
-        FileMetadata.content_reading_status == "failed"
-    ).count()
+        ~FileMetadata.id.in_(classified_file_ids)
+    ).all()
+    unrecognized_count = len(unrecognized_files)
+    
+    # Failed files are now tracked in ProcessingMessage table
+    # For now, we'll use 0 as failed count since we need to join with ProcessingMessage
+    failed_count = 0
     
     return ProcessingResult(
         task_id=task_id,

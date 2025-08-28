@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==========================================
-# 清除所有数据库表内容的脚本
+# 清除所有数据库表内容和MinIO数据的脚本
 # 用于重新做端到端测试
 # ==========================================
 
@@ -17,6 +17,12 @@ DB_NAME="${DB_NAME:-legal_docs_dev}"
 DB_USER="${DB_USER:-$(whoami)}"
 DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-5432}"
+
+# MinIO配置
+MINIO_ENDPOINT="${MINIO_ENDPOINT:-localhost:9000}"
+MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY:-admin}"
+MINIO_SECRET_KEY="${MINIO_SECRET_KEY:-password123}"
+MINIO_BUCKET="${MINIO_BUCKET:-legal-docs}"
 
 # 显示帮助信息
 show_help() {
@@ -34,6 +40,10 @@ show_help() {
     echo "  DB_NAME             数据库名"
     echo "  DB_HOST             数据库主机"
     echo "  DB_PORT             数据库端口"
+    echo "  MINIO_ENDPOINT      MinIO端点 (默认: localhost:9000)"
+    echo "  MINIO_ACCESS_KEY    MinIO访问密钥 (默认: admin)"
+    echo "  MINIO_SECRET_KEY    MinIO密钥 (默认: password123)"
+    echo "  MINIO_BUCKET        MinIO存储桶 (默认: legal-docs)"
     echo ""
     echo "示例:"
     echo "  $0                           # 使用默认值"
@@ -79,8 +89,14 @@ echo -e "${BLUE}  - 主机: ${DB_HOST}${NC}"
 echo -e "${BLUE}  - 端口: ${DB_PORT}${NC}"
 echo ""
 
+echo -e "${BLUE}[INFO] MinIO配置:${NC}"
+echo -e "${BLUE}  - 端点: ${MINIO_ENDPOINT}${NC}"
+echo -e "${BLUE}  - 存储桶: ${MINIO_BUCKET}${NC}"
+echo -e "${BLUE}  - 访问密钥: ${MINIO_ACCESS_KEY}${NC}"
+echo ""
+
 echo -e "${BLUE}==========================================${NC}"
-echo -e "${BLUE}[INFO] 🗑️  清除所有数据库表内容${NC}"
+echo -e "${BLUE}[INFO] 🗑️  清除所有数据库表内容和MinIO数据${NC}"
 echo -e "${BLUE}==========================================${NC}"
 
 # 检查PostgreSQL是否运行
@@ -91,6 +107,30 @@ if ! pg_isready -h $DB_HOST -p $DB_PORT -U $DB_USER > /dev/null 2>&1; then
 fi
 
 echo -e "${GREEN}[INFO] PostgreSQL 连接正常${NC}"
+
+# 检查MinIO是否运行
+echo -e "${BLUE}[STEP] 0. 检查MinIO连接...${NC}"
+if command -v mc >/dev/null 2>&1; then
+    # 使用mc客户端检查连接
+    if mc alias set local http://$MINIO_ENDPOINT $MINIO_ACCESS_KEY $MINIO_SECRET_KEY >/dev/null 2>&1; then
+        if mc ls local/$MINIO_BUCKET >/dev/null 2>&1; then
+            echo -e "${GREEN}[INFO] MinIO 连接正常${NC}"
+            MINIO_AVAILABLE=true
+        else
+            echo -e "${YELLOW}[WARN] MinIO 存储桶 ${MINIO_BUCKET} 不存在或无法访问${NC}"
+            MINIO_AVAILABLE=false
+        fi
+    else
+        echo -e "${YELLOW}[WARN] MinIO 连接失败，跳过MinIO清理${NC}"
+        MINIO_AVAILABLE=false
+    fi
+else
+    echo -e "${YELLOW}[WARN] mc 客户端未安装，跳过MinIO清理${NC}"
+    echo -e "${YELLOW}[INFO] 可以通过以下命令安装mc客户端:${NC}"
+    echo -e "${YELLOW}  macOS: brew install minio/stable/mc${NC}"
+    echo -e "${YELLOW}  Linux: wget https://dl.min.io/client/mc/release/linux-amd64/mc && chmod +x mc${NC}"
+    MINIO_AVAILABLE=false
+fi
 
 # 定义要清除的表（按依赖关系排序，先清除子表）
 TABLES=(
@@ -111,6 +151,9 @@ RECORD_COUNTS_PROCESSING_MESSAGES=0
 RECORD_COUNTS_EXTRACTION_TASKS=0
 RECORD_COUNTS_FILE_METADATA=0
 RECORD_COUNTS_TASKS=0
+
+# MinIO文件统计
+MINIO_FILE_COUNT=0
 
 echo -e "${BLUE}[STEP] 1. 统计清除前的记录数...${NC}"
 
@@ -152,6 +195,14 @@ for table in "${TABLES[@]}"; do
     fi
 done
 
+# 统计MinIO文件数量
+if [ "$MINIO_AVAILABLE" = true ]; then
+    echo -e "${YELLOW}[INFO] 统计MinIO存储桶中的文件数量...${NC}"
+    # 使用正确的mc命令格式统计文件数量
+    MINIO_FILE_COUNT=$(mc ls local/$MINIO_BUCKET --recursive 2>/dev/null | wc -l)
+    echo -e "${GREEN}[INFO] MinIO存储桶: ${MINIO_FILE_COUNT} 个文件${NC}"
+fi
+
 echo -e "${BLUE}[STEP] 2. 开始清除表内容...${NC}"
 
 # 先禁用外键约束检查
@@ -176,7 +227,44 @@ done
 echo -e "${YELLOW}[INFO] 重新启用外键约束检查...${NC}"
 psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -c "SET session_replication_role = DEFAULT;" 2>/dev/null
 
-echo -e "${BLUE}[STEP] 3. 清除完成，汇报结果...${NC}"
+echo -e "${BLUE}[STEP] 3. 清除MinIO数据...${NC}"
+
+if [ "$MINIO_AVAILABLE" = true ]; then
+    echo -e "${YELLOW}[INFO] 开始清除MinIO存储桶中的所有文件...${NC}"
+    
+    # 列出所有文件
+    echo -e "${YELLOW}[INFO] 列出存储桶中的所有文件...${NC}"
+    mc ls local/$MINIO_BUCKET --recursive 2>/dev/null | head -20
+    
+    if [ $MINIO_FILE_COUNT -gt 0 ]; then
+        echo -e "${YELLOW}[INFO] 删除存储桶中的所有文件...${NC}"
+        
+        # 删除所有文件（保留存储桶）
+        # 使用正确的mc命令删除所有对象
+        mc rm local/$MINIO_BUCKET --recursive --force 2>/dev/null
+        
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}[SUCCESS] MinIO存储桶中的所有文件已删除${NC}"
+            
+            # 验证删除结果
+            echo -e "${YELLOW}[INFO] 验证删除结果...${NC}"
+            remaining_files=$(mc ls local/$MINIO_BUCKET --recursive 2>/dev/null | wc -l)
+            if [ "$remaining_files" -eq 0 ]; then
+                echo -e "${GREEN}[SUCCESS] 验证通过：存储桶中无剩余文件${NC}"
+            else
+                echo -e "${RED}[ERROR] 验证失败：存储桶中仍有 ${remaining_files} 个文件${NC}"
+            fi
+        else
+            echo -e "${RED}[ERROR] 删除MinIO文件失败${NC}"
+        fi
+    else
+        echo -e "${YELLOW}[INFO] MinIO存储桶中无文件需要删除${NC}"
+    fi
+else
+    echo -e "${YELLOW}[INFO] 跳过MinIO清理（MinIO不可用）${NC}"
+fi
+
+echo -e "${BLUE}[STEP] 4. 清除完成，汇报结果...${NC}"
 echo -e "${BLUE}==========================================${NC}"
 echo -e "${BLUE}[SUMMARY] 清除结果汇总${NC}"
 echo -e "${BLUE}==========================================${NC}"
@@ -230,16 +318,28 @@ if [ "$RECORD_COUNTS_TASKS" -gt 0 ]; then
     echo -e "${GREEN}✅ 表 tasks: 清除了 ${RECORD_COUNTS_TASKS} 条记录${NC}"
     total_cleared=$((total_cleared + RECORD_COUNTS_TASKS))
 else
-    echo -e "${YELLOW}⚠️  表 tasks: 清除了 ${RECORD_COUNTS_TASKS} 条记录${NC}"
+    echo -e "${YELLOW}⚠️  表 tasks: 无记录${NC}"
+fi
+
+# 显示MinIO清理结果
+if [ "$MINIO_AVAILABLE" = true ]; then
+    if [ "$MINIO_FILE_COUNT" -gt 0 ]; then
+        echo -e "${GREEN}✅ MinIO存储桶: 清除了 ${MINIO_FILE_COUNT} 个文件${NC}"
+        total_cleared=$((total_cleared + MINIO_FILE_COUNT))
+    else
+        echo -e "${YELLOW}⚠️  MinIO存储桶: 无文件${NC}"
+    fi
+else
+    echo -e "${YELLOW}⚠️  MinIO: 跳过清理（不可用）${NC}"
 fi
 
 echo -e "${BLUE}==========================================${NC}"
-echo -e "${GREEN}[SUCCESS] 总共清除了 ${total_cleared} 条记录${NC}"
-echo -e "${BLUE}[INFO] 所有表内容已清除，可以开始新的端到端测试${NC}"
+echo -e "${GREEN}[SUCCESS] 总共清除了 ${total_cleared} 条记录/文件${NC}"
+echo -e "${BLUE}[INFO] 所有表内容和MinIO数据已清除，可以开始新的端到端测试${NC}"
 echo -e "${BLUE}==========================================${NC}"
 
 # 自动重置自增序列
-echo -e "${BLUE}[STEP] 4. 重置自增序列...${NC}"
+echo -e "${BLUE}[STEP] 5. 重置自增序列...${NC}"
 
 for table in "${TABLES[@]}"; do
     # 检查表是否有自增列
@@ -257,5 +357,5 @@ for table in "${TABLES[@]}"; do
     fi
 done
 
-echo -e "${GREEN}[SUCCESS] 🎉 数据库清理完成！${NC}"
+echo -e "${GREEN}[SUCCESS] 🎉 数据库和MinIO清理完成！${NC}"
 echo -e "${BLUE}[INFO] 现在可以开始新的端到端测试了${NC}"

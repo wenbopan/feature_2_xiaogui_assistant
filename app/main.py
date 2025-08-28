@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import logging
 import uvicorn
-import os
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
 from contextlib import asynccontextmanager
@@ -72,14 +71,14 @@ async def lifespan(app: FastAPI):
         logger.error("Kafka Consumer is a critical dependency. Application cannot start without it.")
         raise
     
-    # 启动字段提取消费者服务（强依赖）
-    try:
-        await field_extraction_consumer.start_async_consumer()
-        logger.info("Field extraction consumer service started successfully")
-    except Exception as e:
-        logger.error(f"Failed to start field extraction consumer service: {e}")
-        logger.error("Field extraction consumer is a critical dependency. Application cannot start without it.")
-        raise
+            # 启动字段提取消费者服务（强依赖）
+        try:
+            await field_extraction_consumer.start_async_consumer()
+            logger.info("Field extraction consumer service started successfully")
+        except Exception as e:
+            logger.error(f"Failed to start field extraction consumer service: {e}")
+            logger.error("Field extraction consumer is a critical dependency. Application cannot start without it.")
+            raise
     
     # 启动MinIO服务（强依赖）
     try:

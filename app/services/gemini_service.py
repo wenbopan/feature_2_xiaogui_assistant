@@ -56,28 +56,9 @@ class GeminiService:
     def _classify_file_sync(self, file_content: bytes, file_type: str, filename: str) -> Dict[str, Any]:
         """分类文件 - 同步版本（在executor中运行）"""
         try:
-            # 构建分类提示词
-            prompt = f"""
-            请分析以下文件内容，将其分类为以下5个类别之一：
-            1. 发票 - 各类发票文档
-            2. 租赁协议 - 物业租赁协议文档  
-            3. 变更/解除协议 - 租赁变更或解除协议
-            4. 账单 - 各类账单文档
-            5. 银行回单 - 银行转账回单
-            
-            文件名: {filename}
-            文件类型: {file_type}
-            
-            请返回JSON格式的结果：
-            {{
-                "category": "分类名称",
-                "confidence": 0.0-1.0的置信度,
-                "reason": "分类理由",
-                "key_info": "关键信息摘要"
-            }}
-            
-            如果无法确定分类，请将category设为"未识别"，confidence设为0.0
-            """
+            # 从配置中获取分类提示词
+            from app.config import CLASSIFICATION_PROMPT
+            prompt = CLASSIFICATION_PROMPT.format(filename=filename, file_type=file_type)
             
             # 调用Gemini API - 统一使用视觉模型处理所有文件类型
             if file_type.lower() in ['.jpg', '.jpeg', '.png', '.pdf']:
@@ -183,44 +164,26 @@ class GeminiService:
     def _extract_fields_sync(self, file_content: bytes, file_type: str, filename: str) -> Dict[str, Any]:
         """提取字段 - 同时进行文件分类和字段提取 - 同步版本（在executor中运行）"""
         try:
-            # 构建提取提示词 - 同时要求分类和字段提取
-            prompt = f"""
-            请分析以下文档，同时进行文件分类和字段提取。
+            # 从配置中获取字段提取提示词
+            from app.config import COMBINED_EXTRACTION_PROMPT
+            from app.models.schemas import CATEGORY_FIELD_NAMES
             
-            文件名: {filename}
-            文件类型: {file_type}
+            # 获取各分类的字段列表
+            invoice_fields = "\n   ".join(CATEGORY_FIELD_NAMES["发票"])
+            lease_fields = "\n   ".join(CATEGORY_FIELD_NAMES["租赁协议"])
+            amendment_fields = "\n   ".join(CATEGORY_FIELD_NAMES["变更/解除协议"])
+            bill_fields = "\n   ".join(CATEGORY_FIELD_NAMES["账单"])
+            bank_fields = "\n   ".join(CATEGORY_FIELD_NAMES["银行回单"])
             
-            请返回JSON格式的结果：
-            {{
-                "category": "文件分类结果",
-                "classification_confidence": 0.0-1.0的分类置信度,
-                "classification_reason": "分类理由",
-                "extraction_data": {{
-                    "字段名": "提取的值"
-                }},
-                "missing_fields": ["未能提取的字段列表"],
-                "extraction_confidence": 0.0-1.0的提取置信度,
-                "notes": "提取说明或备注"
-            }}
-            
-            分类要求：
-            请将文件分类为以下5个类别之一：
-            1. 发票 - 各类发票文档
-            2. 租赁协议 - 物业租赁协议文档  
-            3. 变更/解除协议 - 租赁变更或解除协议
-            4. 账单 - 各类账单文档
-            5. 银行回单 - 银行转账回单
-            
-            字段提取要求：
-            根据分类结果，提取对应的关键字段信息。
-            
-            注意：
-            1. 如果某个字段无法提取，请在missing_fields中列出
-            2. 金额字段请保持数字格式，不要包含货币符号
-            3. 日期字段请使用YYYY-MM-DD格式
-            4. 如果字段值为空或无法确定，请设为null
-            5. 分类和字段提取应该基于文件的实际内容
-            """
+            prompt = COMBINED_EXTRACTION_PROMPT.format(
+                filename=filename, 
+                file_type=file_type,
+                invoice_fields=invoice_fields,
+                lease_fields=lease_fields,
+                amendment_fields=amendment_fields,
+                bill_fields=bill_fields,
+                bank_fields=bank_fields
+            )
             
             # 调用Gemini API - 完全参照内容分类的实现，统一使用视觉模型
             if file_type.lower() in ['.jpg', '.jpeg', '.png', '.pdf']:
@@ -295,46 +258,20 @@ class GeminiService:
             }
     
     def _get_field_config(self, category: str) -> Optional[Dict[str, Any]]:
-        """获取字段配置"""
-        field_configs = {
-            "发票": {
-                "购买方名称": "string",
-                "开票日期": "date",
-                "含税金额": "number",
-                "所属租期": "string",
-                "租赁(计费)面积": "number",
-                "楼栋&房号": "string"
-            },
-            "租赁协议": {
-                "承租人名称": "string",
-                "楼栋&房号": "string",
-                "租赁(计费)面积": "number",
-                "租赁期起止": "string",
-                "免租期条款": "string"
-            },
-            "变更/解除协议": {
-                "承租人名称": "string",
-                "楼栋&房号": "string",
-                "租赁(计费)面积": "number",
-                "涉及租赁期、免租期、账期、押金条款的变更情况": "string",
-                "涉及租金条款的变更情况": "string"
-            },
-            "账单": {
-                "承租人名称": "string",
-                "楼栋&房号": "string",
-                "含税金额": "number",
-                "所属租期": "string"
-            },
-            "银行回单": {
-                "付款人名称": "string",
-                "流水日期": "date",
-                "转账金额": "number",
-                "所属租期": "string",
-                "楼栋&房号": "string"
-            }
-        }
+        """获取字段配置 - 从schemas中读取"""
+        from app.models.schemas import CATEGORY_CONFIGS
         
-        return field_configs.get(category)
+        if category in CATEGORY_CONFIGS:
+            config = CATEGORY_CONFIGS[category]
+            return {
+                "name": config.name,
+                "display_name": config.display_name,
+                "description": config.description,
+                "confidence_threshold": config.confidence_threshold,
+                "extraction_fields": config.extraction_fields
+            }
+        
+        return None
     
     def _parse_classification_response(self, response_text: str) -> Dict[str, Any]:
         """解析分类响应"""

@@ -280,11 +280,8 @@ class FileService:
                 total_files = len([f for f in zip_ref.infolist() if not f.is_dir()])
                 logger.info(f"Total files to process (excluding directories): {total_files}")
                 
-                # 显示前几个文件名用于调试
-                logger.info(f"First few files in ZIP: {file_list[:5]}")
-                
                 # 使用 tqdm 创建进度条
-                from tqdm import tqdm # Added missing import
+                from tqdm import tqdm 
                 with tqdm(total=total_files, desc=f"Task {task_id} [EXTRACTING]", unit="files", 
                          bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]') as pbar:
                     
@@ -294,7 +291,8 @@ class FileService:
                             continue
                         
                         # 更新进度条描述，显示当前处理的文件名
-                        filename_display = str(file_info.filename)[:40] + "..." if len(str(file_info.filename)) > 40 else str(file_info.filename)
+                        chinese_compatiable_filename = self._fix_filename_encoding(file_info.filename)
+                        filename_display = str(chinese_compatiable_filename)[:40] + "..." if len(str(chinese_compatiable_filename)) > 40 else str(chinese_compatiable_filename)
                         pbar.set_description(f"Task {task_id} [EXTRACTING] - {filename_display}")
                         
                         try:
@@ -397,8 +395,7 @@ class FileService:
                                     relative_path=decoded_filename,  # 相对路径就是文件名
                                     file_type=file_ext,
                                     file_size=file_info.file_size,
-                                    sha256=file_sha256,
-                                    content_reading_status="pending"
+                                    sha256=file_sha256
                                 )
                                 db.add(file_metadata)
                                 
@@ -567,10 +564,9 @@ class FileService:
             # 统计文件数量
             total_files = db.query(FileMetadata).filter(FileMetadata.task_id == task_id).count()
             classified_files = db.query(FileClassification).filter(FileClassification.task_id == task_id).count()
-            unrecognized_files = db.query(FileMetadata).filter(
-                FileMetadata.task_id == task_id,
-                FileMetadata.content_reading_status == "failed"
-            ).count()
+            # Note: content_reading_status is no longer in FileMetadata
+            # We'll count unrecognized files based on classifications
+            unrecognized_files = total_files - classified_files
             
             # 按分类统计
             category_stats = {}

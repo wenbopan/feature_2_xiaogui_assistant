@@ -80,6 +80,10 @@ test_*.json
 test_*.py
 experimental/
 
+# Data exports
+*.csv
+file_metadata.csv
+
 # Configuration files with sensitive data
 config.local.py
 settings.local.py

@@ -44,17 +44,12 @@ class FileMetadata(Base):
     task_id = Column(Integer, ForeignKey("tasks.id"), nullable=False)
     s3_key = Column(String(500), nullable=False, comment="MinIO中的key")
     original_filename = Column(String(255), nullable=False, comment="原始文件名")
+    logical_filename = Column(String(255), nullable=True, comment="逻辑重命名后的文件名")
     relative_path = Column(String(500), nullable=True, comment="相对路径")
     file_type = Column(String(50), nullable=False, comment="文件类型")
     file_size = Column(Integer, nullable=False, comment="文件大小(字节)")
     sha256 = Column(String(64), nullable=False, comment="文件SHA256")
-    content_reading_status = Column(String(50), default="pending", comment="内容读取状态")
-    content_reading_error = Column(Text, nullable=True, comment="读取错误信息")
-    content_reading_attempts = Column(Integer, default=0, comment="读取尝试次数")
-    content_reading_timestamp = Column(DateTime(timezone=True), nullable=True, comment="最后读取时间")
-    raw_content = Column(Text, nullable=True, comment="PyPDF2提取的原始文本")
-    # 记录来自Gemini或其他AI服务的原始响应（用于审计与复跑）
-    gemini_response = Column(JSON, nullable=True, comment="AI分类/读取的原始响应")
+    extracted_fields = Column(JSON, nullable=True, comment="提取的字段数据（生产环境使用）")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # 关系

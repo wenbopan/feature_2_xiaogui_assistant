@@ -202,6 +202,17 @@ class FieldExtractionConsumer:
             )
             
             db.add(field_extraction)
+            
+            # 同时更新file_metadata表的extracted_fields列（生产环境使用）
+            from app.models.database import FileMetadata
+            
+            file_metadata = db.query(FileMetadata).filter(FileMetadata.id == file_id).first()
+            if file_metadata:
+                file_metadata.extracted_fields = extraction_result.get("extraction_data", {})
+                logger.info(f"Updated file_metadata.extracted_fields for file {file_id}")
+            else:
+                logger.warning(f"FileMetadata not found for file_id: {file_id}")
+            
             db.commit()
             
             logger.info(f"Field extraction completed for file {filename}, category: {extraction_result.get('category', 'unknown')}")
