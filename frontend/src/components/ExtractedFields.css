@@ -11,16 +11,16 @@
 }
 
 .fields-header {
-  padding: 24px;
+  padding: 16px 20px;
   border-bottom: 2px solid var(--border-color);
   background: linear-gradient(135deg, var(--accent-green) 0%, var(--accent-blue) 100%);
   color: white;
 }
 
 .fields-header h3 {
-  margin: 0 0 16px 0;
+  margin: 0 0 12px 0;
   color: white;
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
 }
 
@@ -82,7 +82,7 @@
 
 .fields-content {
   flex: 1;
-  padding: 24px;
+  padding: 16px 20px;
   overflow: auto;
   background: var(--light-color);
   min-height: 0;
@@ -91,7 +91,7 @@
 .fields-display {
   background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
   border-radius: var(--border-radius-sm);
-  overflow: hidden;
+  overflow: auto;
   border: 2px solid var(--border-color);
 }
 
@@ -114,14 +114,14 @@
 }
 
 .file-metadata {
-  padding: 24px;
+  padding: 16px 20px;
   border-top: 2px solid var(--border-color);
   background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-pink) 100%);
   color: white;
 }
 
 .file-metadata h4 {
-  margin: 0 0 16px 0;
+  margin: 0 0 12px 0;
   color: white;
   font-size: clamp(16px, 2.5vw, 20px);
   font-weight: 700;
@@ -172,6 +172,8 @@
 .fields-display pre {
   margin: 0 !important;
   border-radius: var(--border-radius-sm) !important;
+  overflow: auto !important;
+  white-space: pre !important;
 }
 
 /* Responsive design */
@@ -236,4 +238,35 @@
   .file-path {
     font-size: 14px;
   }
+}
+
+/* Custom scrollbar styling for better UX */
+.fields-display::-webkit-scrollbar,
+.fields-display pre::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.fields-display::-webkit-scrollbar-track,
+.fields-display pre::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
+}
+
+.fields-display::-webkit-scrollbar-thumb,
+.fields-display pre::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, var(--accent-green) 0%, var(--accent-blue) 100%);
+  border-radius: 6px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.fields-display::-webkit-scrollbar-thumb:hover,
+.fields-display pre::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-green) 100%);
+}
+
+.fields-display::-webkit-scrollbar-corner,
+.fields-display pre::-webkit-scrollbar-corner {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
 }

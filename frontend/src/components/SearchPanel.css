@@ -1,6 +1,6 @@
 .search-panel {
   background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-  padding: 28px;
+  padding: 16px 20px;
   margin: 0;
   border-radius: var(--border-radius);
   box-shadow: var(--shadow);
@@ -11,8 +11,8 @@
 
 .search-inputs {
   display: flex;
-  gap: 24px;
-  margin-bottom: 24px;
+  gap: 16px;
+  margin-bottom: 16px;
 }
 
 .input-group {
@@ -23,13 +23,13 @@
 
 .input-group label {
   font-weight: 700;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
   color: var(--text-primary);
   font-size: 16px;
 }
 
 .input-group input {
-  padding: 16px 20px;
+  padding: 12px 16px;
   border: 2px solid var(--border-color);
   border-radius: var(--border-radius-sm);
   font-size: 16px;
@@ -51,7 +51,7 @@
 }
 
 .search-btn, .clear-btn {
-  padding: 16px 28px;
+  padding: 12px 20px;
   border: none;
   border-radius: var(--border-radius-sm);
   font-size: 16px;
@@ -90,10 +90,10 @@
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
 }
 
-.upload-link, .processing-link {
+.upload-link, .processing-link, .dashboard-link {
   background: linear-gradient(135deg, var(--accent-green) 0%, var(--accent-blue) 100%);
   color: white;
-  padding: 16px 28px;
+  padding: 12px 20px;
   border-radius: var(--border-radius-sm);
   font-size: 16px;
   font-weight: 700;
@@ -107,6 +107,12 @@
 
 .upload-link:hover {
   background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-green) 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+}
+
+.dashboard-link:hover {
+  background: linear-gradient(135deg, var(--accent-purple) 0%, var(--accent-green) 100%);
   transform: translateY(-2px);
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
 }

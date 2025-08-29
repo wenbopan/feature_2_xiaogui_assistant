@@ -44,9 +44,14 @@ function FileContent({ fileData }) {
 
   const handleMouseMove = (e) => {
     if (isDragging && zoom > 1) {
+      const newPanX = e.clientX - dragStart.x
+      const newPanY = e.clientY - dragStart.y
+      
+      // Add some bounds to prevent extreme panning
+      const maxPan = 1000
       setPan({
-        x: e.clientX - dragStart.x,
-        y: e.clientY - dragStart.y
+        x: Math.max(-maxPan, Math.min(maxPan, newPanX)),
+        y: Math.max(-maxPan, Math.min(maxPan, newPanY))
       })
     }
   }
@@ -60,6 +65,24 @@ function FileContent({ fileData }) {
     setZoom(1)
     setPan({ x: 0, y: 0 })
   }, [content_type])
+
+  // Center image when it loads
+  const handleImageLoad = () => {
+    if (imageRef.current && containerRef.current) {
+      const img = imageRef.current
+      const container = containerRef.current
+      
+      // Calculate center position
+      const containerRect = container.getBoundingClientRect()
+      const imgRect = img.getBoundingClientRect()
+      
+      // Center the image initially
+      const centerX = (containerRect.width - imgRect.width) / 2
+      const centerY = (containerRect.height - imgRect.height) / 2
+      
+      setPan({ x: centerX, y: centerY })
+    }
+  }
 
   const renderContent = () => {
     // Debug info
@@ -118,8 +141,11 @@ function FileContent({ fileData }) {
               className="document-image"
               style={{
                 transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
-                transformOrigin: 'center center'
+                transformOrigin: '0 0',
+                minWidth: '100%',
+                minHeight: '100%'
               }}
+              onLoad={handleImageLoad}
               onError={(e) => {
                 console.error('Image failed to load:', e);
                 e.target.style.display = 'none';

@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import './SearchPanel.css'
 
 function SearchPanel({ onSearch, onClear, loading }) {
+  const navigate = useNavigate()
   const [taskId, setTaskId] = useState('')
   const [relativePath, setRelativePath] = useState('')
 
@@ -72,6 +73,20 @@ function SearchPanel({ onSearch, onClear, loading }) {
           <Link to="/legal-doc/processing" className="processing-link">
             ⚙️ Process Files
           </Link>
+          
+          <button 
+            type="button" 
+            onClick={() => {
+              if (taskId) {
+                navigate(`/legal-doc/dashboard/${taskId}`)
+              } else {
+                alert('Please enter a Task ID first to view the dashboard.')
+              }
+            }}
+            className="dashboard-link"
+          >
+            📊 Dashboard
+          </button>
         </div>
       </form>
     </div>
