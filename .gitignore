@@ -22,6 +22,8 @@ wheels/
 MANIFEST
 
 # Virtual Environment
+backend/venv/
+backend/.venv/
 venv/
 .venv/
 env/
@@ -45,6 +47,7 @@ Thumbs.db
 
 # Logs
 *.log
+backend/logs/
 logs/
 app.log*
 
@@ -55,6 +58,7 @@ uploads/
 *.temp
 
 # Environment variables
+backend/.env
 .env
 .env.local
 .env.*.local
@@ -78,7 +82,7 @@ postgres_data/
 # Test files
 test_*.json
 test_*.py
-experimental/
+backend/experimental/
 
 # Data exports
 *.csv
@@ -87,3 +91,11 @@ file_metadata.csv
 # Configuration files with sensitive data
 config.local.py
 settings.local.py
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local

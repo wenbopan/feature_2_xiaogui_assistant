@@ -1,0 +1,47 @@
+.document-viewer {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  font-family: inherit;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+
+
+.error-message {
+  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+  color: var(--danger-color);
+  padding: 20px;
+  margin: 16px;
+  border-radius: var(--border-radius-sm);
+  border: 2px solid var(--danger-color);
+  text-align: center;
+  font-weight: 600;
+  box-shadow: var(--shadow);
+}
+
+.main-content {
+  display: flex;
+  flex: 1;
+  margin: 0;
+  gap: 0;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .main-content {
+    flex-direction: column;
+    height: auto;
+  }
+  
+  .file-content,
+  .extracted-fields {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+}
