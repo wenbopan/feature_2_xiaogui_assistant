@@ -6,12 +6,9 @@
 """
 
 import logging
-import json
-import asyncio
 import os
 from typing import Dict, Any, Optional, List
 from datetime import datetime
-import uuid
 from sqlalchemy.orm import Session
 
 from app.services.minio_service import minio_service
@@ -21,14 +18,14 @@ from app.models.database import FileMetadata, FileClassification, Task
 
 logger = logging.getLogger(__name__)
 
-class ContentProcessor:
-    """内容处理服务类"""
+class FileClassificationProcessor:
+    """文件分类处理服务类"""
     
     def __init__(self):
         self.supported_extensions = {'.pdf', '.jpg', '.jpeg', '.png'}
     
-    async def process_file(self, task_id: int, file_id: int) -> Dict[str, Any]:
-        """异步处理单个文件（供消费者调用）"""
+    def process_file(self, task_id: int, file_id: int) -> Dict[str, Any]:
+        """同步处理单个文件（供消费者调用）"""
         try:
             from app.models.database import get_db
             from app.services.minio_service import minio_service
@@ -54,7 +51,7 @@ class ContentProcessor:
                     return {"success": False, "error": "Failed to get file content"}
                 
                 # 分类文件 - 使用真实的Gemini AI分类
-                classification_result = await self._classify_file(file_metadata, file_content, db)
+                classification_result = self._classify_file(file_metadata, file_content, db)
                 
                 # 生成逻辑重命名文件名
                 if classification_result["category"] != "未识别":
@@ -137,7 +134,7 @@ class ContentProcessor:
                 "raw_response": {"error": str(e)}
             }
 
-    async def process_content_job(self, message: Dict[str, Any], db: Session) -> Dict[str, Any]:
+    def process_content_job(self, message: Dict[str, Any], db: Session) -> Dict[str, Any]:
         """处理内容处理任务"""
         try:
             # 从data字段中获取任务信息
@@ -160,7 +157,7 @@ class ContentProcessor:
                 raise Exception(f"File metadata {file_id} not found")
             
             # 处理单个文件
-            result = await self._process_single_file(file_metadata, task, db)
+            result = self._process_single_file(file_metadata, task, db)
             
             if result["success"]:
                 logger.info(f"File {file_id} processed successfully")
@@ -187,7 +184,7 @@ class ContentProcessor:
             self._send_failure_notification(task_id, job_id, str(e))
             raise
     
-    async def _process_single_file(self, file_metadata: FileMetadata, task: Task, db: Session) -> Dict[str, Any]:
+    def _process_single_file(self, file_metadata: FileMetadata, task: Task, db: Session) -> Dict[str, Any]:
         """处理单个文件"""
         try:
             # 获取文件内容
@@ -197,7 +194,7 @@ class ContentProcessor:
                 return {"success": False, "error": "Failed to get file content"}
             
             # 直接分类文件，内容处理在分类阶段进行
-            classification_result = await self._classify_file(file_metadata, file_content, db)
+            classification_result = self._classify_file(file_metadata, file_content, db)
             
             # 生成逻辑重命名文件名
             if classification_result["category"] != "未识别":
@@ -235,21 +232,32 @@ class ContentProcessor:
     
     # 移除不必要的_read_file_content函数，内容处理直接在分类阶段进行
     
-    async def _classify_file(self, file_metadata: FileMetadata, file_content: bytes, db: Session) -> Dict[str, Any]:
-        """分类文件 - 统一使用Gemini视觉模型"""
+    def _classify_file(self, file_metadata: FileMetadata, file_content: bytes, db: Session) -> Dict[str, Any]:
+        """分类文件 - 统一使用Gemini视觉模型（同步版本）"""
         try:
             # Content reading status is now tracked in ProcessingMessage table
             # No need to update FileMetadata for this
             
             # 所有文件类型都直接使用Gemini视觉模型进行分类
             # 传递原始二进制内容，让Gemini理解整个文件
-            classification_result = await gemini_service.classify_file(
-                file_content, 
-                file_metadata.file_type, 
-                file_metadata.original_filename
-            )
+            # 使用同步方式调用Gemini服务
+            import asyncio
             
-            return classification_result
+            # 创建新的事件循环来运行异步的Gemini调用
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            try:
+                classification_result = loop.run_until_complete(
+                    gemini_service.classify_file(
+                        file_content, 
+                        file_metadata.file_type, 
+                        file_metadata.original_filename
+                    )
+                )
+                return classification_result
+            finally:
+                loop.close()
             
         except Exception as e:
             logger.error(f"Classification failed: {e}")
@@ -325,5 +333,5 @@ class ContentProcessor:
         except Exception as e:
             logger.warning(f"Failed to send failure notification: {e}")
 
-# 全局内容处理服务实例
-content_processor = ContentProcessor()
+# 全局文件分类处理服务实例
+content_processor = FileClassificationProcessor()

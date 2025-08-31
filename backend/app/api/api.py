@@ -15,6 +15,7 @@ from app.models.schemas import (
     FileMetadataResponse, ClassificationResult, FieldExtractionResult, FileContentResponse
 )
 from app.services.file_service import file_service
+from app.services.simple_file_service import simple_file_service
 from app.services.kafka_service import kafka_service
 from app.services.minio_service import minio_service
 from app.config import settings
@@ -182,6 +183,108 @@ async def get_task_files(task_id: int, db: Session = Depends(get_db)):
 # FILE CONTENT & EXTRACTION ENDPOINTS
 # ============================================================================
 
+# ============================================================================
+# SINGLE FILE PROCESSING ENDPOINTS
+# ============================================================================
+
+@router.post("/files/classify")
+async def classify_single_file(
+    file_content: Optional[UploadFile] = File(None),
+    presigned_url: Optional[str] = Form(None),
+    file_type: str = Form(...),
+    callback_url: Optional[str] = Form(None)
+):
+    """Classify a single file immediately - supports both direct upload and presigned URL"""
+    try:
+        # 验证至少提供一种文件传递方式
+        if not file_content and not presigned_url:
+            raise HTTPException(
+                status_code=400, 
+                detail="Either file_content or presigned_url must be provided"
+            )
+        
+        # 验证文件类型
+        if not file_type.startswith('.'):
+            file_type = '.' + file_type
+        
+        # 调用简单文件服务
+        if file_content:
+            # 直接上传方式
+            content = await file_content.read()
+            result = await simple_file_service.create_single_file_classification_task(
+                file_content=content,
+                file_type=file_type,
+                callback_url=callback_url
+            )
+        else:
+            # 预签名URL方式
+            result = await simple_file_service.create_single_file_classification_task_from_url(
+                presigned_url=presigned_url,
+                file_type=file_type,
+                callback_url=callback_url
+            )
+        
+        return {
+            "status": "success",
+            "message": "File classification task created successfully",
+            "task_id": result["task_id"],
+            "delivery_method": result.get("delivery_method", "unknown"),
+            "callback_url": callback_url
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to create single file classification task: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create classification task: {str(e)}")
+
+@router.post("/files/extract-fields")
+async def extract_fields_single_file(
+    file_content: Optional[UploadFile] = File(None),
+    presigned_url: Optional[str] = Form(None),
+    file_type: str = Form(...),
+    callback_url: Optional[str] = Form(None)
+):
+    """Extract fields from a single file immediately - supports both direct upload and presigned URL"""
+    try:
+        # 验证至少提供一种文件传递方式
+        if not file_content and not presigned_url:
+            raise HTTPException(
+                status_code=400, 
+                detail="Either file_content or presigned_url must be provided"
+            )
+        
+        # 验证文件类型
+        if not file_type.startswith('.'):
+            file_type = '.' + file_type
+        
+        # 调用简单文件服务
+        if file_content:
+            # 直接上传方式
+            content = await file_content.read()
+            result = await simple_file_service.create_single_file_extraction_task(
+                file_content=content,
+                file_type=file_type,
+                callback_url=callback_url
+            )
+        else:
+            # 预签名URL方式
+            result = await simple_file_service.create_single_file_extraction_task_from_url(
+                presigned_url=presigned_url,
+                file_type=file_type,
+                callback_url=callback_url
+            )
+        
+        return {
+            "status": "success",
+            "message": "File field extraction task created successfully",
+            "task_id": result["task_id"],
+            "delivery_method": result.get("delivery_method", "unknown"),
+            "callback_url": callback_url
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to create single file extraction task: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create extraction task: {str(e)}")
+
 @router.post("/files/view-content", response_model=FileContentResponse)
 async def get_file_content(
     request: dict,
@@ -299,26 +402,26 @@ async def get_file_content(
         logger.error(f"Error getting file content for task {task_id}, path {relative_path}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-@router.post("/{task_id}/process", response_model=Dict[str, Any])
-async def create_content_processing_task(
+@router.post("/{task_id}/file-classification", response_model=Dict[str, Any])
+async def create_file_classification_task(
     task_id: int,
     db: Session = Depends(get_db)
 ):
-    """创建内容处理任务 - 异步处理AI内容提取、分类和重命名"""
+    """创建文件分类任务 - 异步处理AI文件分类和逻辑重命名"""
     try:
         result = file_service.create_content_processing_task(task_id, db)
         return result
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"创建内容处理任务失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"创建文件分类任务失败: {str(e)}")
 
-@router.get("/{task_id}/processing-progress", response_model=Dict[str, Any])
-async def get_processing_progress(
+@router.get("/{task_id}/file-classification-progress", response_model=Dict[str, Any])
+async def get_file_classification_progress(
     task_id: int,
     include_details: bool = False,
     db: Session = Depends(get_db)
 ):
-    """获取内容处理任务的进度（分类+重命名）"""
+    """获取文件分类任务的进度（分类+重命名）"""
     try:
         # 验证任务存在
         task = db.query(Task).filter(Task.id == task_id).first()
@@ -370,10 +473,10 @@ async def get_processing_progress(
         
     except Exception as e:
         logger.error(f"Failed to get processing progress for task {task_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"获取处理进度失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"获取文件分类进度失败: {str(e)}")
 
 
-@router.post("/tasks/{task_id}/extract-fields")
+@router.post("/{task_id}/field-extraction")
 async def trigger_field_extraction(task_id: int, db: Session = Depends(get_db)):
     """Trigger field extraction for all files in a task"""
     try:

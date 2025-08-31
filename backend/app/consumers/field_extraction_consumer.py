@@ -4,18 +4,16 @@
 字段提取消费者服务 - 处理字段提取任务
 """
 
-import json
 import logging
 import time
 from datetime import datetime
 from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
 
-from app.models.database import get_db, ProcessingMessage, FieldExtraction
+from app.models.database import get_db, ProcessingMessage
 from app.models.schemas import KafkaMessage, FieldExtractionJobMessage
-from app.services.minio_service import minio_service
-from app.services.gemini_service import gemini_service
 from app.services.kafka_service import kafka_service
+from app.consumers.field_extraction_processor import field_extraction_processor
 
 logger = logging.getLogger(__name__)
 
@@ -162,49 +160,29 @@ class FieldExtractionConsumer:
         try:
             logger.info(f"Processing field extraction for file {extraction_job.file_id}")
             
-            # 获取文件内容从MinIO
-            from app.services.minio_service import minio_service
-            file_content = minio_service.get_file_content(extraction_job.s3_key)
-            if not file_content:
-                raise Exception(f"Failed to get file content from MinIO: {extraction_job.s3_key}")
+            # 准备数据传递给处理器
+            extraction_data = {
+                'file_id': extraction_job.file_id,
+                's3_key': extraction_job.s3_key,
+                'file_type': extraction_job.file_type,
+                'filename': extraction_job.filename
+            }
             
-            # 调用Gemini服务进行实际的字段提取
-            from app.services.gemini_service import gemini_service
+            # 调用字段提取处理器
             import asyncio
-            
-            # 创建事件循环来调用异步方法
             try:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
-                extraction_result = loop.run_until_complete(
-                    gemini_service.extract_fields(
-                        file_content=file_content,
-                        file_type=extraction_job.file_type,
-                        filename=extraction_job.filename
-                    )
+                result = loop.run_until_complete(
+                    field_extraction_processor.process_field_extraction(extraction_data, db)
                 )
             finally:
                 loop.close()
             
-            # 创建FieldExtraction记录 - 使用实际的提取结果
-            field_extraction = FieldExtraction(
-                file_metadata_id=extraction_job.file_id,
-                field_category=extraction_result.get("category", "未识别"),
-                extraction_data=extraction_result.get("extraction_data", {}),
-                missing_fields=extraction_result.get("missing_fields", []),
-                extraction_method="gemini_vision",
-                confidence=extraction_result.get("extraction_confidence", 0.0)
-            )
-            
-            db.add(field_extraction)
-            db.commit()
-            
-            logger.info(f"Field extraction completed for file {extraction_job.filename}: {extraction_result}")
-            return {"success": True, "extracted_fields": extraction_result.get("extraction_data", {})}
+            return result
             
         except Exception as e:
             logger.error(f"Error in field extraction processing: {e}")
-            db.rollback()
             return None
     
     def _update_message_status(self, task_id: int, file_id: int, status: str):

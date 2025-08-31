@@ -66,7 +66,7 @@ function ProcessingPage() {
       // Start content processing (classification + renaming) if selected
       if (processingOptions.rename) {
         try {
-          const processResponse = await fetch(`http://localhost:8000/api/v1/${taskIdNum}/process`, {
+          const processResponse = await fetch(`http://localhost:8000/api/v1/${taskIdNum}/file-classification`, {
             method: 'POST'
           })
           

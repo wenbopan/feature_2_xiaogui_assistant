@@ -12,8 +12,7 @@ from app.config import settings, ensure_directories
 from app.models.database import create_tables
 from app.api import api
 from app.services.kafka_service import kafka_service
-from app.services.kafka_consumer import kafka_consumer_service
-from app.services.field_extraction_consumer import field_extraction_consumer
+from app.consumers import kafka_consumer_service, field_extraction_consumer, simple_file_classification_consumer, simple_field_extraction_consumer
 from app.services.minio_service import minio_service
 
 # 确保logs目录存在
@@ -40,11 +39,13 @@ logger = logging.getLogger(__name__)
 # Global thread references for cleanup
 content_consumer_thread = None
 field_extraction_thread = None
+simple_classification_thread = None
+simple_extraction_thread = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
-    global content_consumer_thread, field_extraction_thread
+    global content_consumer_thread, field_extraction_thread, simple_classification_thread, simple_extraction_thread
     
     # 启动时
     logger.info("Starting Legal Docs MVP application...")
@@ -99,6 +100,36 @@ async def lifespan(app: FastAPI):
         logger.error("Field extraction consumer is a critical dependency. Application cannot start without it.")
         raise
     
+    # 启动简单文件分类消费者服务在单独线程中（强依赖）
+    try:
+        logger.info("Starting simple file classification consumer in separate thread...")
+        simple_classification_thread = threading.Thread(
+            target=simple_file_classification_consumer.start_consumer,
+            name="SimpleClassificationThread",
+            daemon=True
+        )
+        simple_classification_thread.start()
+        logger.info("Simple file classification consumer thread started successfully")
+    except Exception as e:
+        logger.error(f"Failed to start simple file classification consumer thread: {e}")
+        logger.error("Simple file classification consumer is a critical dependency. Application cannot start without it.")
+        raise
+    
+    # 启动简单字段提取消费者服务在单独线程中（强依赖）
+    try:
+        logger.info("Starting simple field extraction consumer in separate thread...")
+        simple_extraction_thread = threading.Thread(
+            target=simple_field_extraction_consumer.start_consumer,
+            name="SimpleExtractionThread",
+            daemon=True
+        )
+        simple_extraction_thread.start()
+        logger.info("Simple field extraction consumer thread started successfully")
+    except Exception as e:
+        logger.error(f"Failed to start simple field extraction consumer thread: {e}")
+        logger.error("Simple field extraction consumer is a critical dependency. Application cannot start without it.")
+        raise
+    
     # 启动MinIO服务（强依赖）
     try:
         success = await minio_service.connect()
@@ -119,6 +150,24 @@ async def lifespan(app: FastAPI):
     
     # 关闭时
     logger.info("Shutting down Legal Docs MVP application...")
+    
+    # 停止简单字段提取消费者线程
+    try:
+        if simple_extraction_thread and simple_extraction_thread.is_alive():
+            simple_field_extraction_consumer.stop_consumer()
+            simple_extraction_thread.join(timeout=5.0)
+            logger.info("Simple field extraction consumer thread stopped")
+    except Exception as e:
+        logger.error(f"Error stopping simple field extraction consumer thread: {e}")
+    
+    # 停止简单文件分类消费者线程
+    try:
+        if simple_classification_thread and simple_classification_thread.is_alive():
+            simple_file_classification_consumer.stop_consumer()
+            simple_classification_thread.join(timeout=5.0)
+            logger.info("Simple file classification consumer thread stopped")
+    except Exception as e:
+        logger.error(f"Error stopping simple file classification consumer thread: {e}")
     
     # 停止字段提取消费者线程
     try:

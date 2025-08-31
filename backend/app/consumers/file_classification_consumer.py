@@ -9,14 +9,14 @@ import json
 import time
 from typing import Dict, Any
 from app.services.kafka_service import kafka_service
-from app.services.content_processor import content_processor
+from app.consumers.file_classification_processor import content_processor
 from app.models.database import get_db
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-class KafkaConsumerService:
-    """Kafka消费者服务"""
+class FileClassificationConsumer:
+    """文件分类Kafka消费者服务"""
     
     # 类变量：定义该服务负责的主题
     TOPICS = ["file.processing"]
@@ -212,4 +212,4 @@ class KafkaConsumerService:
             logger.error(f"Failed to update message status: {e}")
 
 # 创建全局实例
-kafka_consumer_service = KafkaConsumerService()
+kafka_consumer_service = FileClassificationConsumer()

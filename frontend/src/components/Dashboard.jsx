@@ -50,7 +50,7 @@ function Dashboard() {
       }
 
       // Fetch processing progress (renaming/classification)
-      const processResponse = await fetch(`http://localhost:8000/api/v1/${taskId}/processing-progress`)
+              const processResponse = await fetch(`http://localhost:8000/api/v1/${taskId}/file-classification-progress`)
       let processData = null
       if (processResponse.ok) {
         processData = await processResponse.json()
