@@ -14,6 +14,7 @@ from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 from enum import Enum
+from app.proto.file_types import get_file_type_enum, get_category_name
 
 logger = logging.getLogger(__name__)
 
@@ -196,20 +197,25 @@ class CallbackService:
             result = result.replace(placeholder, str(value))
         return result
     
-    async def send_update_file_callback(
+    async def send_classify_file_callback(
         self,
         callback_url: str,
-        callback_body_template: str,
         file_id: str,
-        file_type: str,
+        category: str,
         is_recognized: int,
         callback_id: Optional[str] = None
     ) -> str:
-        """发送文件分类回调"""
+        """发送文件分类回调 - 使用预定义格式"""
+        # 将中文分类名转换为FileType枚举值
+        file_type_enum = get_file_type_enum(category)
+        
+        # 使用预定义的JSON格式进行参数替换
+        callback_body_template = '{"file_id": "${file_id}", "file_type": "${file_type}", "is_recognized": "${is_recognized}"}'
+        
         # 准备替换参数
         replacements = {
             'file_id': file_id,
-            'file_type': file_type,
+            'file_type': file_type_enum,  # 使用枚举值 (0-4)
             'is_recognized': is_recognized
         }
         
@@ -217,35 +223,27 @@ class CallbackService:
         try:
             payload = json.loads(self._replace_parameters(callback_body_template, replacements))
         except json.JSONDecodeError as e:
-            logger.error(f"Invalid JSON template for update_file_callback: {e}")
+            logger.error(f"Invalid JSON template for classify_file_callback: {e}")
             raise ValueError(f"Invalid JSON template: {e}")
         
-        logger.info(f"Sending update_file_callback: file_id={file_id}, file_type={file_type}, is_recognized={is_recognized}")
+        logger.info(f"Sending classify_file_callback: file_id={file_id}, category={category}, file_type={file_type_enum}, is_recognized={is_recognized}")
         return await self.send_callback(callback_url, payload, callback_id)
     
     async def send_extract_file_callback(
         self,
         callback_url: str,
-        callback_body_template: str,
         file_id: str,
         file_content: Dict[str, Any],
         is_extracted: int,
         callback_id: Optional[str] = None
     ) -> str:
-        """发送文件提取回调"""
-        # 准备替换参数
-        replacements = {
-            'file_id': file_id,
-            'file_content': json.dumps(file_content, ensure_ascii=False),
-            'is_extracted': is_extracted
+        """发送文件提取回调 - 使用预定义格式"""
+        # 直接构建JSON payload，避免字符串替换问题
+        payload = {
+            "file_id": file_id,
+            "file_content": file_content,  # 直接使用字典，让aiohttp自动序列化
+            "is_extracted": is_extracted
         }
-        
-        # 替换模板中的参数
-        try:
-            payload = json.loads(self._replace_parameters(callback_body_template, replacements))
-        except json.JSONDecodeError as e:
-            logger.error(f"Invalid JSON template for extract_file_callback: {e}")
-            raise ValueError(f"Invalid JSON template: {e}")
         
         logger.info(f"Sending extract_file_callback: file_id={file_id}, is_extracted={is_extracted}, fields_count={len(file_content)}")
         return await self.send_callback(callback_url, payload, callback_id)
@@ -282,6 +280,59 @@ class CallbackService:
         except requests.exceptions.RequestException as e:
             logger.error(f"Sync callback {callback_id} failed with exception: {e}")
             return callback_id
+    
+    def send_classify_file_callback_sync(
+        self,
+        callback_url: str,
+        file_id: str,
+        category: str,
+        is_recognized: int,
+        callback_id: Optional[str] = None,
+        timeout: int = 30
+    ) -> str:
+        """发送文件分类回调 (同步版本) - 使用预定义格式"""
+        # 将中文分类名转换为FileType枚举值
+        file_type_enum = get_file_type_enum(category)
+        
+        # 使用预定义的JSON格式进行参数替换
+        callback_body_template = '{"file_id": "${file_id}", "file_type": "${file_type}", "is_recognized": "${is_recognized}"}'
+        
+        # 准备替换参数
+        replacements = {
+            'file_id': file_id,
+            'file_type': file_type_enum,  # 使用枚举值 (0-4)
+            'is_recognized': is_recognized
+        }
+        
+        # 替换模板中的参数
+        try:
+            payload = json.loads(self._replace_parameters(callback_body_template, replacements))
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON template for classify_file_callback_sync: {e}")
+            raise ValueError(f"Invalid JSON template: {e}")
+        
+        logger.info(f"Sending classify_file_callback_sync: file_id={file_id}, category={category}, file_type={file_type_enum}, is_recognized={is_recognized}")
+        return self.send_callback_sync(callback_url, payload, callback_id, timeout)
+    
+    def send_extract_file_callback_sync(
+        self,
+        callback_url: str,
+        file_id: str,
+        file_content: Dict[str, Any],
+        is_extracted: int,
+        callback_id: Optional[str] = None,
+        timeout: int = 30
+    ) -> str:
+        """发送文件提取回调 (同步版本) - 使用预定义格式"""
+        # 直接构建JSON payload，避免字符串替换问题
+        payload = {
+            "file_id": file_id,
+            "file_content": file_content,  # 直接使用字典，让requests自动序列化
+            "is_extracted": is_extracted
+        }
+        
+        logger.info(f"Sending extract_file_callback_sync: file_id={file_id}, is_extracted={is_extracted}, fields_count={len(file_content)}")
+        return self.send_callback_sync(callback_url, payload, callback_id, timeout)
 
 # 创建全局实例
 callback_service = CallbackService()

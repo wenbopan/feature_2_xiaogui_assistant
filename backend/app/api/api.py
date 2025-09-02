@@ -7,6 +7,7 @@ import os
 import shutil
 from pathlib import Path
 from datetime import datetime
+import time
 import json
 import uuid
 
@@ -640,7 +641,7 @@ async def readiness_check():
 # ============================================================================
 
 # Simple in-memory storage for callback results (for E2E testing)
-# Key: file_id, Value: callback response
+# Key: file_id, Value: array of callback responses
 callback_results = {}
 
 @router.post("/callbacks/classify-file")
@@ -648,12 +649,16 @@ async def classify_file_callback(callback_data: dict):
     """测试用：文件分类回调接口"""
     file_id = callback_data.get("file_id")
     if file_id:
-        # Store the callback result for E2E testing
-        callback_results[file_id] = {
+        # Initialize array if file_id doesn't exist
+        if file_id not in callback_results:
+            callback_results[file_id] = []
+        
+        # Append new callback result
+        callback_results[file_id].append({
             "type": "classification",
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": time.time(),
             "data": callback_data
-        }
+        })
         logger.info(f"Classification callback received for file {file_id}: {callback_data}")
     return callback_data
 
@@ -662,21 +667,27 @@ async def extract_file_callback(callback_data: dict):
     """测试用：文件提取回调接口"""
     file_id = callback_data.get("file_id")
     if file_id:
-        # Store the callback result for E2E testing
-        callback_results[file_id] = {
+        # Initialize array if file_id doesn't exist
+        if file_id not in callback_results:
+            callback_results[file_id] = []
+        
+        # Append new callback result
+        callback_results[file_id].append({
             "type": "extraction", 
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": time.time(),
             "data": callback_data
-        }
+        })
         logger.info(f"Extraction callback received for file {file_id}: {callback_data}")
     return callback_data
 
 @router.get("/callbacks/results/{file_id}")
 async def get_callback_result(file_id: str):
-    """Get callback result for specific file_id"""
+    """Get all callback results for specific file_id"""
     if file_id in callback_results:
-        return callback_results[file_id]
-    return {"message": "No callback result found for this file_id"}
+        # Sort by timestamp to get chronological order
+        results = sorted(callback_results[file_id], key=lambda x: x["timestamp"])
+        return {"results": results}
+    return {"message": "No callback results found for this file_id", "results": []}
 
 @router.get("/callbacks/results")
 async def get_all_callback_results():

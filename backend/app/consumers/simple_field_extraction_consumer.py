@@ -8,7 +8,7 @@
 import logging
 import time
 from typing import Dict, Any
-from app.services.kafka_service import kafka_service
+
 from app.consumers.field_extraction_processor import field_extraction_processor
 from app.services.callback_service import callback_service
 from app.services.minio_service import minio_service
@@ -33,8 +33,19 @@ class SimpleFieldExtractionConsumer:
             logger.debug(f"Using topics: {self.TOPICS}")
             
             # 创建消费者
-            logger.debug("Creating Kafka consumer via kafka_service...")
-            self.consumer = kafka_service.create_sync_consumer(self.TOPICS)
+            logger.debug("Creating Kafka consumer directly...")
+            from kafka import KafkaConsumer
+            import json
+            
+            self.consumer = KafkaConsumer(
+                *self.TOPICS,
+                bootstrap_servers=['localhost:9092'],
+                value_deserializer=lambda m: json.loads(m.decode('utf-8')),
+                key_deserializer=lambda m: m.decode('utf-8') if m else None,
+                auto_offset_reset='earliest',
+                enable_auto_commit=True,
+                group_id="legal_docs_consumers"
+            )
             logger.debug(f"Consumer created successfully: {self.consumer}")
             
             logger.debug("Setting running flag to True...")
@@ -224,76 +235,53 @@ class SimpleFieldExtractionConsumer:
             
             if result and result.get("success"):
                 # 提取成功
-                success_result = {
-                    "file_id": file_id,  # Use frontend-provided file_id
-                    "task_id": task_id,
-                    "job_id": job_id,
-                    "status": "completed",
-                    "result": {
-                        "extracted_fields": result.get("extracted_fields", {}),
-                        "field_category": result.get("field_category", "未识别"),
-                        "confidence": result.get("confidence", 0.0),
-                        "method": "gemini_vision"
-                    },
-                    "timestamp": time.time()
-                }
+                extracted_fields = result.get("extracted_fields", {})
+                is_extracted = 1  # 已提取
                 
                 logger.info(f"Single file extraction completed for job {job_id}: {result}")
                 
-                # 发送成功回调
+                # 发送成功回调 - 使用新的预定义格式
                 if callback_url:
-                    self._send_success_callback(callback_url, success_result)
+                    self._send_success_callback(callback_url, file_id, extracted_fields, is_extracted)
                     
             else:
                 # 提取失败
-                error_msg = f"Field extraction failed: {result}"
-                logger.warning(error_msg)
+                extracted_fields = {}
+                is_extracted = 0  # 未提取
                 
+                logger.warning(f"Field extraction failed: {result}")
+                
+                # 发送失败回调 - 使用新的预定义格式
                 if callback_url:
-                    self._send_error_callback(callback_url, file_id, task_id, job_id, error_msg)
+                    self._send_success_callback(callback_url, file_id, extracted_fields, is_extracted)
                 
         except Exception as e:
             error_msg = f"Error handling single file extraction job: {e}"
             logger.error(error_msg)
             
-            # 尝试发送错误回调
+            # 尝试发送错误回调 - 使用新的预定义格式
             try:
                 data = message_data.get("data", {})
                 callback_url = data.get("callback_url")
-                task_id = data.get("task_id")
-                job_id = data.get("job_id")
                 
-                if callback_url and task_id and job_id:
-                    self._send_error_callback(callback_url, file_id, task_id, job_id, error_msg)
+                if callback_url:
+                    # 发送失败回调
+                    extracted_fields = {}
+                    is_extracted = 0  # 未提取
+                    self._send_success_callback(callback_url, file_id, extracted_fields, is_extracted)
             except:
                 pass
     
-    def _send_success_callback(self, callback_url: str, result: Dict[str, Any]):
-        """发送成功回调"""
+    def _send_success_callback(self, callback_url: str, file_id: str, extracted_fields: Dict[str, Any], is_extracted: int):
+        """发送成功回调 - 使用预定义格式"""
         try:
-            # 使用同步回调
-            callback_service.send_callback_sync(callback_url, result)
+            # 使用新的同步回调方法
+            callback_service.send_extract_file_callback_sync(callback_url, file_id, extracted_fields, is_extracted)
             logger.info(f"Success callback sent to: {callback_url}")
         except Exception as e:
             logger.error(f"Failed to send success callback: {e}")
     
-    def _send_error_callback(self, callback_url: str, file_id: str, task_id: str, job_id: str, error_msg: str):
-        """发送错误回调"""
-        try:
-            error_result = {
-                "file_id": file_id,  # Use frontend-provided file_id
-                "task_id": task_id,
-                "job_id": job_id,
-                "status": "failed",
-                "error": error_msg,
-                "timestamp": time.time()
-            }
-            
-            # 使用同步回调
-            callback_service.send_callback_sync(callback_url, error_result)
-            logger.info(f"Error callback sent to: {callback_url}")
-        except Exception as e:
-            logger.error(f"Failed to send error callback: {e}")
+
 
 # 创建全局实例
 simple_field_extraction_consumer = SimpleFieldExtractionConsumer()

@@ -8,7 +8,7 @@ import logging
 import json
 import time
 from typing import Dict, Any
-from app.services.kafka_service import kafka_service
+
 from app.consumers.file_classification_processor import content_processor
 from app.models.database import get_db, Task, FileMetadata, FileClassification
 from app.services.minio_service import minio_service
@@ -33,8 +33,19 @@ class FileClassificationConsumer:
             logger.debug(f"Using topics: {self.TOPICS}")
             
             # 创建消费者，使用类定义的主题
-            logger.debug("Creating Kafka consumer via kafka_service...")
-            self.consumer = kafka_service.create_sync_consumer(self.TOPICS)
+            logger.debug("Creating Kafka consumer directly...")
+            from kafka import KafkaConsumer
+            import json
+            
+            self.consumer = KafkaConsumer(
+                *self.TOPICS,
+                bootstrap_servers=['localhost:9092'],
+                value_deserializer=lambda m: json.loads(m.decode('utf-8')),
+                key_deserializer=lambda m: m.decode('utf-8') if m else None,
+                auto_offset_reset='earliest',
+                enable_auto_commit=True,
+                group_id="legal_docs_consumers"
+            )
             logger.debug(f"Consumer created successfully: {self.consumer}")
             
             logger.debug("Setting running flag to True...")

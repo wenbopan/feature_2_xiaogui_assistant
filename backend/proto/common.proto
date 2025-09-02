@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package common;
+
+// File type enumeration for document classification
+enum FileType {
+  FILE_TYPE_UNKNOWN = 0;
+  FILE_TYPE_INVOICE = 1;          // 发票
+  FILE_TYPE_BANK_STATEMENT = 2;   // 银行流水
+  FILE_TYPE_BILL = 3;             // 账单 
+  FILE_TYPE_LEASE_AGREEMENT = 4;  // 租赁协议
+}

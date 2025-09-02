@@ -11,7 +11,7 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime
 
 from app.services.gemini_service import gemini_service
-from app.services.kafka_service import kafka_service
+
 
 logger = logging.getLogger(__name__)
 

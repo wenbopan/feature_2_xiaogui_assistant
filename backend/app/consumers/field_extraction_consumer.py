@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.models.database import get_db, ProcessingMessage
 from app.models.schemas import KafkaMessage, FieldExtractionJobMessage
-from app.services.kafka_service import kafka_service
+
 from app.consumers.field_extraction_processor import field_extraction_processor
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,18 @@ class FieldExtractionConsumer:
             logger.info("Starting field extraction consumer service...")
             
             # 创建消费者
-            self.consumer = kafka_service.create_sync_consumer([self.topic])
+            from kafka import KafkaConsumer
+            import json
+            
+            self.consumer = KafkaConsumer(
+                self.topic,
+                bootstrap_servers=['localhost:9092'],
+                value_deserializer=lambda m: json.loads(m.decode('utf-8')),
+                key_deserializer=lambda m: m.decode('utf-8') if m else None,
+                auto_offset_reset='earliest',
+                enable_auto_commit=True,
+                group_id="legal_docs_consumers"
+            )
             self.running = True
             
             # 启动消费循环

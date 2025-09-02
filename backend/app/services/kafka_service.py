@@ -39,29 +39,7 @@ class KafkaService:
             logger.error(f"Failed to connect to Kafka: {e}")
             return False
     
-    def create_sync_consumer(self, topics: List[str]):
-        """创建同步消费者（用于线程中）"""
-        try:
-            from kafka import KafkaConsumer
-            import json
-            
-            # 创建同步Kafka消费者
-            consumer = KafkaConsumer(
-                *topics,
-                bootstrap_servers=self.bootstrap_servers,
-                value_deserializer=lambda m: json.loads(m.decode('utf-8')),
-                key_deserializer=lambda m: m.decode('utf-8') if m else None,
-                auto_offset_reset='earliest',
-                enable_auto_commit=True,
-                group_id="legal_docs_consumers"  # Fixed consumer group name
-            )
-            
-            logger.info(f"Created sync consumer for topics: {topics}")
-            return consumer
-            
-        except Exception as e:
-            logger.error(f"Failed to create sync consumer: {e}")
-            raise
+
     
     async def disconnect(self):
         """断开Kafka连接"""
@@ -150,31 +128,7 @@ class KafkaService:
             key=key.encode() if key else None
         )
     
-    async def create_consumer(self, topics: List[str]) -> AIOKafkaConsumer:
-        """创建Kafka消费者"""
-        try:
-            consumer = AIOKafkaConsumer(
-                *topics,
-                bootstrap_servers=self.bootstrap_servers,
-                group_id="legal_consumer_group",  # 使用固定的消费者组ID
-                value_deserializer=lambda x: json.loads(x.decode()),
-                auto_offset_reset='earliest',
-                enable_auto_commit=True,
-                auto_commit_interval_ms=5000,
-                session_timeout_ms=30000,
-                heartbeat_interval_ms=10000
-            )
-            await consumer.start()
-            
-            consumer_id = str(uuid.uuid4())
-            self.consumers[consumer_id] = consumer
-            
-            logger.info(f"Created Kafka consumer for topics: {topics}")
-            return consumer
-            
-        except Exception as e:
-            logger.error(f"Failed to create consumer for topics {topics}: {e}")
-            raise
+
     
     def get_connection_status(self) -> Dict[str, Any]:
         """获取连接状态信息"""
