@@ -8,6 +8,7 @@
 import logging
 import asyncio
 import aiohttp
+import requests
 import json
 from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
@@ -186,6 +187,101 @@ class CallbackService:
             callback.retry_count += 1
             logger.info(f"Retrying failed callback: {callback.id}")
             asyncio.create_task(self._send_callback_async(callback))
+    
+    def _replace_parameters(self, template: str, replacements: Dict[str, Any]) -> str:
+        """替换模板中的参数"""
+        result = template
+        for key, value in replacements.items():
+            placeholder = f"${{{key}}}"
+            result = result.replace(placeholder, str(value))
+        return result
+    
+    async def send_update_file_callback(
+        self,
+        callback_url: str,
+        callback_body_template: str,
+        file_id: str,
+        file_type: str,
+        is_recognized: int,
+        callback_id: Optional[str] = None
+    ) -> str:
+        """发送文件分类回调"""
+        # 准备替换参数
+        replacements = {
+            'file_id': file_id,
+            'file_type': file_type,
+            'is_recognized': is_recognized
+        }
+        
+        # 替换模板中的参数
+        try:
+            payload = json.loads(self._replace_parameters(callback_body_template, replacements))
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON template for update_file_callback: {e}")
+            raise ValueError(f"Invalid JSON template: {e}")
+        
+        logger.info(f"Sending update_file_callback: file_id={file_id}, file_type={file_type}, is_recognized={is_recognized}")
+        return await self.send_callback(callback_url, payload, callback_id)
+    
+    async def send_extract_file_callback(
+        self,
+        callback_url: str,
+        callback_body_template: str,
+        file_id: str,
+        file_content: Dict[str, Any],
+        is_extracted: int,
+        callback_id: Optional[str] = None
+    ) -> str:
+        """发送文件提取回调"""
+        # 准备替换参数
+        replacements = {
+            'file_id': file_id,
+            'file_content': json.dumps(file_content, ensure_ascii=False),
+            'is_extracted': is_extracted
+        }
+        
+        # 替换模板中的参数
+        try:
+            payload = json.loads(self._replace_parameters(callback_body_template, replacements))
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON template for extract_file_callback: {e}")
+            raise ValueError(f"Invalid JSON template: {e}")
+        
+        logger.info(f"Sending extract_file_callback: file_id={file_id}, is_extracted={is_extracted}, fields_count={len(file_content)}")
+        return await self.send_callback(callback_url, payload, callback_id)
+    
+    def send_callback_sync(
+        self,
+        callback_url: str,
+        payload: Dict[str, Any],
+        callback_id: Optional[str] = None,
+        timeout: int = 30
+    ) -> str:
+        """发送回调请求 (同步版本)"""
+        if not callback_id:
+            callback_id = f"cb_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
+        
+        logger.info(f"Sending sync callback {callback_id} to {callback_url}")
+        
+        try:
+            # 使用 requests 发送同步 HTTP 请求
+            response = requests.post(
+                callback_url,
+                json=payload,
+                headers={'Content-Type': 'application/json'},
+                timeout=timeout
+            )
+            
+            if response.status_code == 200:
+                logger.info(f"Sync callback {callback_id} sent successfully")
+                return callback_id
+            else:
+                logger.error(f"Sync callback {callback_id} failed with status {response.status_code}: {response.text}")
+                return callback_id
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Sync callback {callback_id} failed with exception: {e}")
+            return callback_id
 
 # 创建全局实例
 callback_service = CallbackService()

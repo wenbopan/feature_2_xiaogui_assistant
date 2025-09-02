@@ -10,7 +10,8 @@ import time
 from typing import Dict, Any
 from app.services.kafka_service import kafka_service
 from app.consumers.file_classification_processor import content_processor
-from app.models.database import get_db
+from app.models.database import get_db, Task, FileMetadata, FileClassification
+from app.services.minio_service import minio_service
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -136,26 +137,17 @@ class FileClassificationConsumer:
             # 更新消息状态为已消费
             self._update_message_status(task_id, file_id, "consumed")
             
-            # 处理内容 - 调用异步方法
-            import asyncio
-            try:
-                # Create event loop for async call
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                result = loop.run_until_complete(
-                    content_processor.process_file(task_id, file_id)
-                )
-            finally:
-                loop.close()
+            # 处理内容 - 消费者自己处理文件获取和数据库操作
+            result = self._process_file_with_db(task_id, file_id)
             
-            if result:
+            if result and result.get("success"):
                 # 更新消息状态为已完成
                 self._update_message_status(task_id, file_id, "completed")
                 logger.info(f"Content processing job {job_id} completed: {result}")
             else:
                 # 更新消息状态为失败
                 self._update_message_status(task_id, file_id, "failed")
-                logger.error(f"Content processing job {job_id} failed")
+                logger.error(f"Content processing job {job_id} failed: {result}")
                 
         except Exception as e:
             logger.error(f"Error handling processing job: {e}")
@@ -173,6 +165,79 @@ class FileClassificationConsumer:
                     self._update_message_status(task_id, file_id, "failed")
             except:
                 pass
+    
+    def _process_file_with_db(self, task_id: int, file_id: int) -> Dict[str, Any]:
+        """
+        处理单个文件（包含数据库操作）- 消费者自己处理文件获取和数据库操作
+        
+        Args:
+            task_id: 任务ID
+            file_id: 文件ID
+            
+        Returns:
+            处理结果字典
+        """
+        try:
+            db = next(get_db())
+            try:
+                # 获取任务信息
+                task = db.query(Task).filter(Task.id == task_id).first()
+                if not task:
+                    logger.error(f"Task {task_id} not found")
+                    return {"success": False, "error": "Task not found"}
+                
+                # 获取文件元数据
+                file_metadata = db.query(FileMetadata).filter(FileMetadata.id == file_id).first()
+                if not file_metadata:
+                    logger.error(f"File metadata {file_id} not found")
+                    return {"success": False, "error": "File metadata not found"}
+                
+                # 获取文件内容
+                file_content = minio_service.get_file_content(file_metadata.s3_key)
+                if not file_content:
+                    logger.error(f"Failed to get file content for {file_metadata.s3_key}")
+                    return {"success": False, "error": "Failed to get file content"}
+                
+                # 使用处理器进行分类（不依赖数据库）
+                result = content_processor.process_file_content(
+                    file_content,
+                    file_metadata.file_type,
+                    file_metadata.original_filename,
+                    task.organize_date,
+                    task.project_name
+                )
+                
+                if result["success"] and result.get("logical_filename"):
+                    # 更新FileMetadata的逻辑文件名
+                    file_metadata.logical_filename = result["logical_filename"]
+                    
+                    # 创建分类记录
+                    classification = FileClassification(
+                        task_id=task.id,
+                        file_metadata_id=file_metadata.id,
+                        category=result["category"],
+                        confidence=result["confidence"],
+                        final_filename=result["logical_filename"],
+                        classification_method=result["classification"].get("method", "gemini"),
+                        gemini_response=result["classification"].get("raw_response")
+                    )
+                    
+                    db.add(classification)
+                    db.commit()
+                    
+                    logger.info(f"File logically renamed: {file_metadata.original_filename} -> {result['logical_filename']}")
+                    return {"success": True, "logical_filename": result["logical_filename"]}
+                else:
+                    # 未识别的文件
+                    logger.info(f"File classified as unrecognized: {file_metadata.original_filename}")
+                    return {"success": True, "category": "unrecognized"}
+                    
+            finally:
+                db.close()
+                
+        except Exception as e:
+            logger.error(f"Error processing file {file_id}: {e}")
+            return {"success": False, "error": str(e)}
     
     def _update_message_status(self, task_id: int, file_id: int, status: str):
         """更新处理消息状态"""

@@ -7,12 +7,12 @@
 
 import logging
 import time
-import asyncio
 from typing import Dict, Any
 from app.services.kafka_service import kafka_service
 from app.consumers.field_extraction_processor import field_extraction_processor
 from app.services.callback_service import callback_service
 from app.services.minio_service import minio_service
+from app.models.schemas import SingleFileKafkaMessage, SingleFileExtractionJobData
 
 logger = logging.getLogger(__name__)
 
@@ -49,15 +49,20 @@ class SimpleFieldExtractionConsumer:
             raise
     
     def stop_consumer(self):
-        """同步停止消费者"""
+        """同步停止消费者 - 优雅关闭"""
         try:
             logger.info("Stopping simple field extraction consumer service...")
             logger.debug("Setting running flag to False...")
             self.running = False
             
-            # 停止消费者
+            # 优雅停止消费者
             if self.consumer:
-                logger.debug("Stopping Kafka consumer...")
+                # 等待一下让消费者有机会退出循环
+                import time
+                time.sleep(2)
+                
+                logger.debug("Closing Kafka consumer...")
+                # 关闭消费者
                 self.consumer.close()
                 self.consumer = None
                 logger.debug("Kafka consumer stopped successfully")
@@ -115,25 +120,41 @@ class SimpleFieldExtractionConsumer:
     def _handle_single_file_extraction_job(self, message_data: Dict[str, Any], message):
         """处理单个文件字段提取任务"""
         try:
-            # 获取任务信息
-            task_id = message_data.get("task_id")
-            job_id = message_data.get("job_id")
-            s3_key = message_data.get("s3_key")  # MinIO S3 key
-            presigned_url = message_data.get("presigned_url")  # 预签名URL
-            file_type = message_data.get("file_type")
-            callback_url = message_data.get("callback_url")
-            delivery_method = message_data.get("delivery_method", "minio")
-            
-            if not all([task_id, job_id, file_type]):
-                logger.error(f"Missing required fields in message: {message_data}")
+            # 使用Pydantic验证消息数据
+            try:
+                # 解析为SingleFileKafkaMessage (wrapped format)
+                kafka_message = SingleFileKafkaMessage(**message_data)
+                
+                # 类型检查：使用消息类型字段
+                if kafka_message.data.type == "single_file_extraction_job":
+                    # 解析为SingleFileExtractionJobData - the data is directly in kafka_message.data
+                    job_data = SingleFileExtractionJobData(**kafka_message.data.model_dump())
+                    logger.debug(f"Parsed single file extraction job: {job_data}")
+                else:
+                    logger.warning(f"Unknown message type: {kafka_message.data.type}")
+                    return
+                    
+            except Exception as e:
+                logger.error(f"Invalid message format: {e}")
+                logger.error(f"Message data keys: {list(message_data.keys()) if isinstance(message_data, dict) else 'Not a dict'}")
                 return
+            
+            # 提取验证后的字段
+            task_id = job_data.task_id
+            job_id = job_data.job_id
+            file_id = job_data.file_id
+            s3_key = job_data.s3_key
+            presigned_url = job_data.presigned_url
+            file_type = job_data.file_type
+            callback_url = job_data.callback_url
+            delivery_method = job_data.delivery_method
             
             # 验证至少有一种文件传递方式
             if not s3_key and not presigned_url:
                 error_msg = "Neither s3_key nor presigned_url provided in message"
                 logger.error(error_msg)
                 if callback_url:
-                    self._send_error_callback(callback_url, task_id, job_id, error_msg)
+                    self._send_error_callback(callback_url, file_id, task_id, job_id, error_msg)
                 return
             
             logger.info(f"Processing single file extraction job {job_id} for task {task_id} via {delivery_method}")
@@ -142,32 +163,20 @@ class SimpleFieldExtractionConsumer:
             if delivery_method == "presigned_url" and presigned_url:
                 # 从预签名URL下载文件内容
                 try:
-                    import aiohttp
-                    import asyncio
+                    import requests
                     
-                    # 创建事件循环来调用异步方法
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    
-                    try:
-                        async def download_from_url():
-                            async with aiohttp.ClientSession() as session:
-                                async with session.get(presigned_url) as response:
-                                    if response.status == 200:
-                                        return await response.read()
-                                    else:
-                                        raise Exception(f"HTTP {response.status}")
-                        
-                        file_content = loop.run_until_complete(download_from_url())
+                    response = requests.get(presigned_url, timeout=30)
+                    if response.status_code == 200:
+                        file_content = response.content
                         logger.info(f"Downloaded file from presigned URL: {len(file_content)} bytes")
-                    finally:
-                        loop.close()
+                    else:
+                        raise Exception(f"HTTP {response.status_code}")
                         
                 except Exception as e:
                     error_msg = f"Failed to download file from presigned URL: {e}"
                     logger.error(error_msg)
                     if callback_url:
-                        self._send_error_callback(callback_url, task_id, job_id, error_msg)
+                        self._send_error_callback(callback_url, file_id, task_id, job_id, error_msg)
                     return
             elif delivery_method == "minio" and s3_key:
                 # 从MinIO下载文件内容
@@ -184,40 +193,39 @@ class SimpleFieldExtractionConsumer:
                     error_msg = f"Failed to download file from MinIO: {e}"
                     logger.error(error_msg)
                     if callback_url:
-                        self._send_error_callback(callback_url, task_id, job_id, error_msg)
+                        self._send_error_callback(callback_url, file_id, task_id, job_id, error_msg)
                     return
             else:
                 error_msg = f"Invalid delivery method or missing content: {delivery_method}"
                 logger.error(error_msg)
                 if callback_url:
-                    self._send_error_callback(callback_url, task_id, job_id, error_msg)
+                    self._send_error_callback(callback_url, file_id, task_id, job_id, error_msg)
                 return
             
-            # 处理字段提取 - 调用异步方法
-            import asyncio
-            try:
-                # Create event loop for async call
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                
-                # 准备数据传递给处理器
-                extraction_data = {
-                    'file_id': 0,  # 临时ID
-                    's3_key': "",  # 空字符串，因为文件内容直接传递
-                    'file_type': file_type,
-                    'filename': f"single_file_{task_id}{file_type}"
-                }
-                
-                # 调用字段提取处理器
-                result = loop.run_until_complete(
-                    field_extraction_processor.process_field_extraction(extraction_data, None)
-                )
-            finally:
-                loop.close()
+            # 两阶段处理：先分类，再提取字段
+            # 第一阶段：分类
+            from app.services.gemini_service import gemini_service
+            classification_result = gemini_service.classify_file_sync(
+                file_content, 
+                file_type, 
+                f"single_file_{task_id}{file_type}"
+            )
+            
+            category = classification_result.get("category", "未识别")
+            logger.info(f"Single file {task_id} classified as: {category}")
+            
+            # 第二阶段：字段提取（使用已知分类，更高效）
+            result = field_extraction_processor.extract_fields_from_content(
+                file_content, 
+                file_type, 
+                f"single_file_{task_id}{file_type}",
+                category=category
+            )
             
             if result and result.get("success"):
                 # 提取成功
                 success_result = {
+                    "file_id": file_id,  # Use frontend-provided file_id
                     "task_id": task_id,
                     "job_id": job_id,
                     "status": "completed",
@@ -242,7 +250,7 @@ class SimpleFieldExtractionConsumer:
                 logger.warning(error_msg)
                 
                 if callback_url:
-                    self._send_error_callback(callback_url, task_id, job_id, error_msg)
+                    self._send_error_callback(callback_url, file_id, task_id, job_id, error_msg)
                 
         except Exception as e:
             error_msg = f"Error handling single file extraction job: {e}"
@@ -250,30 +258,30 @@ class SimpleFieldExtractionConsumer:
             
             # 尝试发送错误回调
             try:
-                callback_url = message_data.get("callback_url")
-                task_id = message_data.get("task_id")
-                job_id = message_data.get("job_id")
+                data = message_data.get("data", {})
+                callback_url = data.get("callback_url")
+                task_id = data.get("task_id")
+                job_id = data.get("job_id")
                 
                 if callback_url and task_id and job_id:
-                    self._send_error_callback(callback_url, task_id, job_id, error_msg)
+                    self._send_error_callback(callback_url, file_id, task_id, job_id, error_msg)
             except:
                 pass
     
     def _send_success_callback(self, callback_url: str, result: Dict[str, Any]):
         """发送成功回调"""
         try:
-            # 异步发送回调
-            asyncio.create_task(
-                callback_service.send_callback(callback_url, result)
-            )
+            # 使用同步回调
+            callback_service.send_callback_sync(callback_url, result)
             logger.info(f"Success callback sent to: {callback_url}")
         except Exception as e:
             logger.error(f"Failed to send success callback: {e}")
     
-    def _send_error_callback(self, callback_url: str, task_id: str, job_id: str, error_msg: str):
+    def _send_error_callback(self, callback_url: str, file_id: str, task_id: str, job_id: str, error_msg: str):
         """发送错误回调"""
         try:
             error_result = {
+                "file_id": file_id,  # Use frontend-provided file_id
                 "task_id": task_id,
                 "job_id": job_id,
                 "status": "failed",
@@ -281,10 +289,8 @@ class SimpleFieldExtractionConsumer:
                 "timestamp": time.time()
             }
             
-            # 异步发送回调
-            asyncio.create_task(
-                callback_service.send_callback(callback_url, error_result)
-            )
+            # 使用同步回调
+            callback_service.send_callback_sync(callback_url, error_result)
             logger.info(f"Error callback sent to: {callback_url}")
         except Exception as e:
             logger.error(f"Failed to send error callback: {e}")

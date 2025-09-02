@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
 import logging
@@ -192,6 +193,7 @@ async def classify_single_file(
     file_content: Optional[UploadFile] = File(None),
     presigned_url: Optional[str] = Form(None),
     file_type: str = Form(...),
+    file_id: Optional[str] = Form(None),
     callback_url: Optional[str] = Form(None)
 ):
     """Classify a single file immediately - supports both direct upload and presigned URL"""
@@ -214,6 +216,7 @@ async def classify_single_file(
             result = await simple_file_service.create_single_file_classification_task(
                 file_content=content,
                 file_type=file_type,
+                file_id=file_id,
                 callback_url=callback_url
             )
         else:
@@ -221,16 +224,15 @@ async def classify_single_file(
             result = await simple_file_service.create_single_file_classification_task_from_url(
                 presigned_url=presigned_url,
                 file_type=file_type,
+                file_id=file_id,
                 callback_url=callback_url
             )
         
-        return {
-            "status": "success",
-            "message": "File classification task created successfully",
-            "task_id": result["task_id"],
-            "delivery_method": result.get("delivery_method", "unknown"),
-            "callback_url": callback_url
-        }
+        # Return 200 OK for successful task publication
+        return JSONResponse(
+            status_code=200,
+            content={"message": "File classification task published successfully"}
+        )
         
     except Exception as e:
         logger.error(f"Failed to create single file classification task: {e}")
@@ -241,6 +243,7 @@ async def extract_fields_single_file(
     file_content: Optional[UploadFile] = File(None),
     presigned_url: Optional[str] = Form(None),
     file_type: str = Form(...),
+    file_id: Optional[str] = Form(None),
     callback_url: Optional[str] = Form(None)
 ):
     """Extract fields from a single file immediately - supports both direct upload and presigned URL"""
@@ -263,6 +266,7 @@ async def extract_fields_single_file(
             result = await simple_file_service.create_single_file_extraction_task(
                 file_content=content,
                 file_type=file_type,
+                file_id=file_id,
                 callback_url=callback_url
             )
         else:
@@ -270,16 +274,15 @@ async def extract_fields_single_file(
             result = await simple_file_service.create_single_file_extraction_task_from_url(
                 presigned_url=presigned_url,
                 file_type=file_type,
+                file_id=file_id,
                 callback_url=callback_url
             )
         
-        return {
-            "status": "success",
-            "message": "File field extraction task created successfully",
-            "task_id": result["task_id"],
-            "delivery_method": result.get("delivery_method", "unknown"),
-            "callback_url": callback_url
-        }
+        # Return 200 OK for successful task publication
+        return JSONResponse(
+            status_code=200,
+            content={"message": "File field extraction task published successfully"}
+        )
         
     except Exception as e:
         logger.error(f"Failed to create single file extraction task: {e}")
@@ -365,7 +368,22 @@ async def get_file_content(
             elif processing_msg.status in ["created", "consumed", "processing"]:
                 extraction_status = "pending"
         
-        # 4. Generate download URL from MinIO
+        # 4. Get the latest successful field extraction
+        from app.models.database import FieldExtraction
+        latest_extraction = db.query(FieldExtraction).filter(
+            FieldExtraction.file_metadata_id == file_metadata.id,
+            FieldExtraction.confidence > 0  # Only successful extractions
+        ).order_by(FieldExtraction.created_at.desc()).first()
+        
+        # Use extracted fields from the latest successful extraction, fallback to file_metadata
+        extracted_fields = file_metadata.extracted_fields
+        if latest_extraction and latest_extraction.extraction_data:
+            extracted_fields = latest_extraction.extraction_data
+            logger.info(f"Using extracted fields from field_extractions table for file {file_metadata.id}")
+        else:
+            logger.info(f"No successful field extraction found for file {file_metadata.id}, using file_metadata.extracted_fields")
+        
+        # 5. Generate download URL from MinIO
         try:
             logger.info(f"Generating download URL for file {file_metadata.id}, s3_key: {file_metadata.s3_key}")
             
@@ -380,7 +398,7 @@ async def get_file_content(
             logger.error(f"Failed to generate download URL for file {file_metadata.id}: {e}")
             download_url = None
         
-        # 5. Assemble response
+        # 6. Assemble response
         response = FileContentResponse(
             task_id=task_id,
             original_filename=file_metadata.original_filename,
@@ -388,7 +406,7 @@ async def get_file_content(
             file_download_url=download_url,
             content_type=file_metadata.file_type,
             file_size=file_metadata.file_size,
-            extracted_fields=file_metadata.extracted_fields,
+            extracted_fields=extracted_fields,
             final_filename=file_metadata.logical_filename,
             extraction_status=extraction_status,
             extraction_error=extraction_error
@@ -610,3 +628,158 @@ async def readiness_check():
         "timestamp": "2025-02-18T00:00:00Z",
         "version": "1.0.0"
     }
+
+# ============================================================================
+# CONSUMER MANAGEMENT ENDPOINTS
+# ============================================================================
+
+
+
+# ============================================================================
+# CALLBACK TESTING ENDPOINTS
+# ============================================================================
+
+# Simple in-memory storage for callback results (for E2E testing)
+# Key: file_id, Value: callback response
+callback_results = {}
+
+@router.post("/callbacks/classify-file")
+async def classify_file_callback(callback_data: dict):
+    """测试用：文件分类回调接口"""
+    file_id = callback_data.get("file_id")
+    if file_id:
+        # Store the callback result for E2E testing
+        callback_results[file_id] = {
+            "type": "classification",
+            "timestamp": datetime.now().isoformat(),
+            "data": callback_data
+        }
+        logger.info(f"Classification callback received for file {file_id}: {callback_data}")
+    return callback_data
+
+@router.post("/callbacks/extract-file")
+async def extract_file_callback(callback_data: dict):
+    """测试用：文件提取回调接口"""
+    file_id = callback_data.get("file_id")
+    if file_id:
+        # Store the callback result for E2E testing
+        callback_results[file_id] = {
+            "type": "extraction", 
+            "timestamp": datetime.now().isoformat(),
+            "data": callback_data
+        }
+        logger.info(f"Extraction callback received for file {file_id}: {callback_data}")
+    return callback_data
+
+@router.get("/callbacks/results/{file_id}")
+async def get_callback_result(file_id: str):
+    """Get callback result for specific file_id"""
+    if file_id in callback_results:
+        return callback_results[file_id]
+    return {"message": "No callback result found for this file_id"}
+
+@router.get("/callbacks/results")
+async def get_all_callback_results():
+    """Get all callback results for E2E testing"""
+    return {"results": callback_results}
+
+@router.delete("/callbacks/results")
+async def clear_callback_results():
+    """Clear callback results for E2E testing"""
+    global callback_results
+    callback_results.clear()
+    return {"message": "Callback results cleared"}
+
+# ============================================================================
+# CONFIGURATION MANAGEMENT ENDPOINTS
+# ============================================================================
+
+@router.get("/config/instructions")
+async def get_instructions_config():
+    """获取当前指令配置（包含内存中的指令）"""
+    from app.config import instructions_manager
+    try:
+        config = instructions_manager.get_config()
+        memory_instructions = instructions_manager.get_memory_instructions()
+        return {
+            "success": True,
+            "config": config,
+            "memory_instructions": memory_instructions,
+            "last_modified": instructions_manager._last_modified,
+            "config_path": instructions_manager.config_path
+        }
+    except Exception as e:
+        logger.error(f"Failed to get instructions config: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get config: {str(e)}")
+
+@router.post("/config/instructions/hot-swap")
+async def hot_swap_instructions(instructions_data: dict):
+    """热交换指令（更新内存中的指令）"""
+    from app.config import instructions_manager
+    try:
+        # 验证输入数据
+        required_categories = ['invoice', 'lease', 'amendment', 'bill', 'bank_receipt']
+        for category in required_categories:
+            if category not in instructions_data:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Missing required category: {category}"
+                )
+        
+        # 执行热交换
+        instructions_manager.hot_swap_instructions(instructions_data)
+        
+        # 获取更新后的配置
+        config = instructions_manager.get_config()
+        memory_instructions = instructions_manager.get_memory_instructions()
+        
+        return {
+            "success": True,
+            "message": "Instructions hot-swapped successfully",
+            "config": config,
+            "memory_instructions": memory_instructions,
+            "last_modified": instructions_manager._last_modified
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to hot-swap instructions: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to hot-swap instructions: {str(e)}")
+
+@router.post("/config/instructions/reset")
+async def reset_instructions_to_original():
+    """重置指令为原始配置"""
+    from app.config import instructions_manager
+    try:
+        instructions_manager.reset_to_original()
+        config = instructions_manager.get_config()
+        memory_instructions = instructions_manager.get_memory_instructions()
+        
+        return {
+            "success": True,
+            "message": "Instructions reset to original config successfully",
+            "config": config,
+            "memory_instructions": memory_instructions,
+            "last_modified": instructions_manager._last_modified
+        }
+    except Exception as e:
+        logger.error(f"Failed to reset instructions: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to reset instructions: {str(e)}")
+
+@router.get("/config/instructions/category/{category}")
+async def get_instruction_for_category(category: str):
+    """获取指定分类的指令"""
+    from app.config import instructions_manager
+    try:
+        instruction = instructions_manager.get_instruction_for_category(category)
+        return {
+            "success": True,
+            "category": category,
+            "instruction": instruction
+        }
+    except Exception as e:
+        logger.error(f"Failed to get instruction for category {category}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get instruction: {str(e)}")
+
+

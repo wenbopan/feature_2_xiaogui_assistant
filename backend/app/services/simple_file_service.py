@@ -27,6 +27,7 @@ class SimpleFileService:
         self,
         file_content: bytes,
         file_type: str,
+        file_id: Optional[str] = None,
         callback_url: Optional[str] = None
     ) -> Dict[str, Any]:
         """创建单个文件分类任务 - 上传到MinIO，发送S3 key到Kafka"""
@@ -65,6 +66,7 @@ class SimpleFileService:
                     "type": "single_file_classification_job",
                     "job_id": str(uuid.uuid4()),
                     "task_id": task_id,
+                    "file_id": file_id,  # Frontend-provided file ID
                     "s3_key": s3_key,  # MinIO S3 key
                     "file_type": file_type,
                     "callback_url": callback_url,
@@ -123,6 +125,7 @@ class SimpleFileService:
                 "type": "single_file_classification_job",
                 "job_id": str(uuid.uuid4()),
                 "task_id": task_id,
+                "file_id": file_id,  # Frontend-provided file ID
                 "presigned_url": presigned_url,  # 预签名URL
                 "file_type": file_type,
                 "callback_url": callback_url,
@@ -151,6 +154,7 @@ class SimpleFileService:
         self,
         file_content: bytes,
         file_type: str,
+        file_id: Optional[str] = None,
         callback_url: Optional[str] = None
     ) -> Dict[str, Any]:
         """创建单个文件字段提取任务 - 上传到MinIO，发送S3 key到Kafka"""
@@ -189,6 +193,7 @@ class SimpleFileService:
                     "type": "single_file_extraction_job",
                     "job_id": str(uuid.uuid4()),
                     "task_id": task_id,
+                    "file_id": file_id,  # Frontend-provided file ID
                     "s3_key": s3_key,  # MinIO S3 key
                     "file_type": file_type,
                     "callback_url": callback_url,
@@ -225,6 +230,7 @@ class SimpleFileService:
         self,
         presigned_url: str,
         file_type: str,
+        file_id: Optional[str] = None,
         callback_url: Optional[str] = None
     ) -> Dict[str, Any]:
         """从预签名URL创建单个文件字段提取任务"""
@@ -247,6 +253,7 @@ class SimpleFileService:
                 "type": "single_file_extraction_job",
                 "job_id": str(uuid.uuid4()),
                 "task_id": task_id,
+                "file_id": file_id,  # Frontend-provided file ID
                 "presigned_url": presigned_url,  # 预签名URL
                 "file_type": file_type,
                 "callback_url": callback_url,

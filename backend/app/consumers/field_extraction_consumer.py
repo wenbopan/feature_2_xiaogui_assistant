@@ -160,24 +160,56 @@ class FieldExtractionConsumer:
         try:
             logger.info(f"Processing field extraction for file {extraction_job.file_id}")
             
-            # 准备数据传递给处理器
-            extraction_data = {
-                'file_id': extraction_job.file_id,
-                's3_key': extraction_job.s3_key,
-                'file_type': extraction_job.file_type,
-                'filename': extraction_job.filename
-            }
+            # 获取文件内容
+            from app.services.minio_service import minio_service
+            file_content = minio_service.get_file_content(extraction_job.s3_key)
+            if not file_content:
+                raise Exception(f"Failed to get file content from MinIO: {extraction_job.s3_key}")
             
-            # 调用字段提取处理器
-            import asyncio
-            try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                result = loop.run_until_complete(
-                    field_extraction_processor.process_field_extraction(extraction_data, db)
+            # 两阶段处理：先分类，再提取字段
+            # 第一阶段：分类
+            from app.services.gemini_service import gemini_service
+            classification_result = gemini_service.classify_file_sync(
+                file_content, 
+                extraction_job.file_type, 
+                extraction_job.filename
+            )
+            
+            category = classification_result.get("category", "未识别")
+            logger.info(f"File {extraction_job.file_id} classified as: {category}")
+            
+            # 第二阶段：字段提取（使用已知分类，更高效）
+            result = field_extraction_processor.extract_fields_from_content(
+                file_content, 
+                extraction_job.file_type, 
+                extraction_job.filename,
+                category=category
+            )
+            
+            if result and result.get("success"):
+                # 创建FieldExtraction记录 - 使用实际的提取结果
+                from app.models.database import FieldExtraction
+                field_extraction = FieldExtraction(
+                    file_metadata_id=extraction_job.file_id,
+                    field_category=result.get("field_category", "未识别"),
+                    extraction_data=result.get("extracted_fields", {}),
+                    missing_fields=[],  # 暂时为空，可以根据需要扩展
+                    extraction_method="gemini_vision",
+                    confidence=result.get("confidence", 0.0)
                 )
-            finally:
-                loop.close()
+                
+                db.add(field_extraction)
+                
+                # 同时更新file_metadata表中的extracted_fields列
+                from app.models.database import FileMetadata
+                file_metadata = db.query(FileMetadata).filter(FileMetadata.id == extraction_job.file_id).first()
+                if file_metadata:
+                    file_metadata.extracted_fields = result.get("extracted_fields", {})
+                    logger.info(f"Updated file_metadata.extracted_fields for file {extraction_job.file_id}")
+                else:
+                    logger.warning(f"FileMetadata not found for file_id: {extraction_job.file_id}")
+                
+                db.commit()
             
             return result
             

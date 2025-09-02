@@ -8,7 +8,7 @@ from pathlib import Path
 from logging.handlers import RotatingFileHandler
 from contextlib import asynccontextmanager
 
-from app.config import settings, ensure_directories
+from app.config import settings, ensure_directories, instructions_manager
 from app.models.database import create_tables
 from app.api import api
 from app.services.kafka_service import kafka_service
@@ -59,6 +59,25 @@ async def lifespan(app: FastAPI):
         logger.info("Database tables created successfully")
     except Exception as e:
         logger.error(f"Failed to create database tables: {e}")
+        raise
+    
+    # 初始化指令配置到内存
+    try:
+        logger.info("Initializing instructions configuration...")
+        instructions_manager.initialize_config()
+        
+        # 验证初始化成功
+        if not instructions_manager.is_initialized():
+            raise RuntimeError("Instructions config initialization failed")
+            
+        memory_instructions = instructions_manager.get_memory_instructions()
+        logger.info(f"Instructions loaded into memory successfully")
+        logger.info(f"Loaded instruction categories: {list(memory_instructions.keys())}")
+        logger.info("All required instruction categories are loaded and validated")
+            
+    except Exception as e:
+        logger.error(f"Failed to initialize instructions in memory: {e}")
+        logger.error("Instructions are critical for document processing. Application cannot start without them.")
         raise
     
     # 启动Kafka服务（强依赖）
@@ -144,7 +163,11 @@ async def lifespan(app: FastAPI):
         logger.error("MinIO is a critical dependency. Application cannot start without it.")
         raise
     
+    # 记录启动完成信息
+    memory_instructions = instructions_manager.get_memory_instructions()
     logger.info("Application startup completed")
+    logger.info(f"Instructions ready: {len(memory_instructions)} categories loaded")
+    logger.info(f"Available instruction categories: {', '.join(memory_instructions.keys())}")
     
     yield
     
@@ -240,10 +263,33 @@ async def global_exception_handler(request, exc):
 @app.get("/health")
 async def health_check():
     """简单健康检查接口"""
+    from datetime import datetime
+    
+    # 检查指令配置状态
+    try:
+        if instructions_manager.is_initialized():
+            memory_instructions = instructions_manager.get_memory_instructions()
+            instructions_status = {
+                "initialized": True,
+                "categories_count": len(memory_instructions),
+                "categories": list(memory_instructions.keys())
+            }
+        else:
+            instructions_status = {
+                "initialized": False,
+                "error": "Instructions config not initialized"
+            }
+    except Exception as e:
+        instructions_status = {
+            "initialized": False,
+            "error": str(e)
+        }
+    
     return {
         "status": "healthy",
-        "timestamp": "2025-02-18T00:00:00Z",
-        "version": "1.0.0"
+        "timestamp": datetime.now().isoformat(),
+        "version": "1.0.0",
+        "instructions": instructions_status
     }
 
 # Readiness检查接口

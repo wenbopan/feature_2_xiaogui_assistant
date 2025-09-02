@@ -53,7 +53,7 @@ class KafkaService:
                 key_deserializer=lambda m: m.decode('utf-8') if m else None,
                 auto_offset_reset='earliest',
                 enable_auto_commit=True,
-                group_id=f"sync_consumer_{uuid.uuid4().hex[:8]}"
+                group_id="legal_docs_consumers"  # Fixed consumer group name
             )
             
             logger.info(f"Created sync consumer for topics: {topics}")
