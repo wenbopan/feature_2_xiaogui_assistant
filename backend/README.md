@@ -132,7 +132,7 @@ python -m app.main
 }
 ```
 
-#### 回调结果查询
+#### 回调结果查询 (自测用)
 - **端点**: `GET /api/v1/callbacks/results/{file_id}`
 - **描述**: 查询指定文件的所有回调结果
 - **路径参数**: `file_id` (string)
@@ -164,7 +164,7 @@ python -m app.main
 
 ### 基础端点
 
-#### 健康检查
+#### 健康检查 (placeholder接口并没有实现真实health check)
 - **端点**: `GET /health`
 - **描述**: 简单健康检查接口
 - **响应**:
@@ -368,6 +368,96 @@ python -m app.main
 - **描述**: 下载任务的处理结果ZIP文件
 - **路径参数**: `task_id` (int)
 - **响应**: ZIP文件流
+
+### 提示词微调API
+
+#### 获取指令配置
+- **端点**: `GET /api/v1/config/instructions`
+- **描述**: 获取当前指令配置（包含内存中的指令）
+- **响应**:
+```json
+{
+  "config": {
+    "file_path": "config/instructions.yaml",
+    "last_modified": "2025-08-24T20:00:00"
+  },
+  "memory_instructions": {
+    "invoice": "发票分类指令...",
+    "lease": "租赁合同分类指令...",
+    "amendment": "合同修订分类指令...",
+    "bill": "账单分类指令...",
+    "bank_receipt": "银行回单分类指令..."
+  }
+}
+```
+
+#### 提示词in memory更新指令
+- **端点**: `POST /api/v1/config/instructions/hot-swap`
+- **描述**: 热交换指令（更新内存中的指令，无需重启服务）
+- **请求参数**:
+```json
+{
+  "invoice": "新的发票分类指令",
+  "lease": "新的租赁合同分类指令",
+  "amendment": "新的合同修订分类指令",
+  "bill": "新的账单分类指令",
+  "bank_receipt": "新的银行回单分类指令"
+}
+```
+- **响应**:
+```json
+{
+  "success": true,
+  "message": "Instructions hot-swapped successfully",
+  "config": {
+    "file_path": "config/instructions.yaml",
+    "last_modified": "2025-08-24T20:00:00"
+  },
+  "memory_instructions": {
+    "invoice": "新的发票分类指令",
+    "lease": "新的租赁合同分类指令",
+    "amendment": "新的合同修订分类指令",
+    "bill": "新的账单分类指令",
+    "bank_receipt": "新的银行回单分类指令"
+  },
+  "last_modified": "2025-08-24T20:00:00"
+}
+```
+
+#### 重置指令为原始配置
+- **端点**: `POST /api/v1/config/instructions/reset`
+- **描述**: 重置指令为原始配置文件中的内容
+- **响应**:
+```json
+{
+  "success": true,
+  "message": "Instructions reset to original config successfully",
+  "config": {
+    "file_path": "config/instructions.yaml",
+    "last_modified": "2025-08-24T20:00:00"
+  },
+  "memory_instructions": {
+    "invoice": "原始发票分类指令",
+    "lease": "原始租赁合同分类指令",
+    "amendment": "原始合同修订分类指令",
+    "bill": "原始账单分类指令",
+    "bank_receipt": "原始银行回单分类指令"
+  },
+  "last_modified": "2025-08-24T20:00:00"
+}
+```
+
+#### 获取指定分类的指令
+- **端点**: `GET /api/v1/config/instructions/category/{category}`
+- **描述**: 获取指定分类的指令内容
+- **路径参数**: `category` (string) - 分类名称 (invoice, lease, amendment, bill, bank_receipt)
+- **响应**:
+```json
+{
+  "category": "invoice",
+  "instruction": "发票分类指令内容..."
+}
+```
 
 ## 🔧 配置
 
