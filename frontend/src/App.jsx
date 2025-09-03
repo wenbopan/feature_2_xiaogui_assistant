@@ -4,6 +4,9 @@ import DocumentViewer from './components/DocumentViewer'
 import UploadPage from './components/UploadPage'
 import ProcessingPage from './components/ProcessingPage'
 import Dashboard from './components/Dashboard'
+import InstructionsPage from './components/InstructionsPage'
+import SingleFileTest from './components/SingleFileTest'
+import CallbackTest from './components/CallbackTest'
 
 function App() {
   return (
@@ -21,6 +24,15 @@ function App() {
           
           {/* Dashboard route with task ID parameter */}
           <Route path="/legal-doc/dashboard/:taskId" element={<Dashboard />} />
+          
+          {/* Instructions management route */}
+          <Route path="/legal-doc/instructions" element={<InstructionsPage />} />
+          
+          {/* Single file test route */}
+          <Route path="/legal-doc/single-file-test" element={<SingleFileTest />} />
+          
+          {/* E2E single file test route */}
+          <Route path="/legal-doc/e2e-test" element={<CallbackTest />} />
           
           {/* Future routes for expansion */}
           <Route path="/legal-doc/tasks" element={<DocumentViewer />} />
