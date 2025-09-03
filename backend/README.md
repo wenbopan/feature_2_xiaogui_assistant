@@ -1,4 +1,4 @@
-# Legal Docs MVP Application
+# 法律文档处理系统
 
 一个基于FastAPI、Kafka、PostgreSQL和MinIO的法律文档处理系统，支持文件上传、内容提取和字段分类。
 
@@ -11,6 +11,7 @@
 - **对象存储**: MinIO
 - **AI服务**: Google Gemini API
 - **数据验证**: Pydantic
+- **gRPC协议**: 标准化文件类型枚举
 
 ### 架构组件
 ```
@@ -34,24 +35,25 @@
 - **内容处理服务**: 文件内容读取和分类
 - **文件服务**: ZIP文件上传、解压和处理
 - **存储服务**: MinIO对象存储管理
+- **回调服务**: 异步处理结果回调通知
 
 ## 🚀 快速开始
 
 ### 环境要求
 - Python 3.11+
+- uv (Python包管理器)
 - Docker (用于PostgreSQL、MinIO、Redpanda)
 - 或者本地安装PostgreSQL、MinIO、Redpanda
 
 ### 安装依赖
 ```bash
-# 创建虚拟环境
-python3.11 -m venv venv
-source venv/bin/activate  # Linux/Mac
-# 或
-venv\Scripts\activate  # Windows
+# 使用 uv 创建虚拟环境并安装依赖
+uv sync
 
-# 安装依赖
-pip install -r requirements.txt
+# 激活虚拟环境
+source .venv/bin/activate  # Linux/Mac
+# 或
+.venv\Scripts\activate  # Windows
 ```
 
 ### 启动服务
@@ -72,7 +74,93 @@ python -m app.main
 ./shutdown.sh
 ```
 
-## 📚 完整API文档
+## 📚 API文档
+
+### 🔥 微服务核心API（单文件处理）
+
+#### 单文件分类
+- **端点**: `POST /api/v1/files/classify`
+- **描述**: 对单个文件进行智能分类，支持异步回调
+- **请求参数**:
+  - `file`: 文件 (multipart/form-data)
+  - `callback_url`: 回调URL (可选)
+  - `file_id`: 文件ID (可选，用于关联回调)
+  - `presigned_url`: 预签名URL (可选，用于文件上传)
+- **响应**:
+```json
+{
+  "message": "文件分类任务已发布",
+  "file_id": "unique_file_id",
+  "task_id": "task_uuid"
+}
+```
+- **回调格式**:
+```json
+{
+  "file_id": "unique_file_id",
+  "file_type": 1,
+  "is_recognized": 1
+}
+```
+
+#### 单文件字段提取
+- **端点**: `POST /api/v1/files/extract-fields`
+- **描述**: 对单个文件进行字段提取，支持异步回调
+- **请求参数**:
+  - `file`: 文件 (multipart/form-data)
+  - `callback_url`: 回调URL (可选)
+  - `file_id`: 文件ID (可选，用于关联回调)
+  - `presigned_url`: 预签名URL (可选，用于文件上传)
+- **响应**:
+```json
+{
+  "message": "字段提取任务已发布",
+  "file_id": "unique_file_id",
+  "task_id": "task_uuid"
+}
+```
+- **回调格式**:
+```json
+{
+  "file_id": "unique_file_id",
+  "file_content": {
+    "购买方名称": "张三",
+    "开票日期": "2025-08-24",
+    "含税金额": 1000.00
+  },
+  "is_extracted": 1
+}
+```
+
+#### 回调结果查询
+- **端点**: `GET /api/v1/callbacks/results/{file_id}`
+- **描述**: 查询指定文件的所有回调结果
+- **路径参数**: `file_id` (string)
+- **响应**:
+```json
+{
+  "results": [
+    {
+      "type": "classification",
+      "timestamp": 1756809967.3720698,
+      "data": {
+        "file_id": "unique_file_id",
+        "file_type": 1,
+        "is_recognized": 1
+      }
+    },
+    {
+      "type": "extraction",
+      "timestamp": 1756809968.1234567,
+      "data": {
+        "file_id": "unique_file_id",
+        "file_content": {...},
+        "is_extracted": 1
+      }
+    }
+  ]
+}
+```
 
 ### 基础端点
 
@@ -92,7 +180,7 @@ python -m app.main
 - **端点**: `GET /docs`
 - **描述**: Swagger UI交互式API文档
 
-### 任务管理API
+### 批量处理API
 
 #### 创建任务
 - **端点**: `POST /api/v1/tasks/`
@@ -281,50 +369,6 @@ python -m app.main
 - **路径参数**: `task_id` (int)
 - **响应**: ZIP文件流
 
-## 🔄 消息队列
-
-### Kafka Topics
-- **field.extraction**: 字段提取任务
-- **file.processing**: 文件处理任务
-
-### 消息格式
-```json
-{
-  "metadata": {
-    "id": "uuid",
-    "timestamp": 1234567890.123,
-    "key": "optional_key",
-    "source": "service_name"
-  },
-  "data": {
-    "type": "field_extraction_job",
-    "job_id": "uuid",
-    "task_id": 1,
-    "file_id": 1,
-    "s3_key": "path/to/file",
-    "file_type": "pdf",
-    "filename": "document.pdf"
-  }
-}
-```
-
-## 🗄️ 数据库设计
-
-### 核心表
-- **tasks**: 任务信息
-- **file_metadata**: 文件元数据
-- **file_classifications**: 文件分类结果
-- **field_extractions**: 字段提取结果
-- **processing_messages**: 消息处理状态
-- **file_extraction_failures**: 字段提取失败记录
-
-### 关系模型
-```
-Task (1) ── (N) FileMetadata (1) ── (N) FileClassification
-                                    (1) ── (N) FieldExtraction
-                                    (1) ── (N) FileExtractionFailure
-```
-
 ## 🔧 配置
 
 ### 环境变量
@@ -346,7 +390,8 @@ GEMINI_API_KEY=your_api_key_here
 
 ### 配置文件
 - `app/config.py`: 应用配置
-- `requirements.txt`: Python依赖
+- `pyproject.toml`: 项目配置和依赖管理
+- `uv.lock`: 依赖锁定文件
 - `startup.sh`: 服务启动脚本
 - `shutdown.sh`: 服务停止脚本
 
@@ -356,26 +401,37 @@ GEMINI_API_KEY=your_api_key_here
 silicon_feature_2/
 ├── app/                    # 应用代码
 │   ├── api/               # API路由
-│   │   ├── tasks.py       # 任务管理API
-│   │   └── extractions.py # 字段提取API
+│   │   └── api.py        # 统一API路由
 │   ├── models/            # 数据模型
 │   │   ├── database.py    # 数据库模型
-│   │   └── schemas.py     # Pydantic模型
+│   │   ├── schemas.py     # Pydantic模型
+│   │   └── prompt_schemas.py # 提示词模型
 │   ├── services/          # 业务服务
 │   │   ├── file_service.py           # 文件处理服务
+│   │   ├── simple_file_service.py   # 单文件处理服务
 │   │   ├── gemini_service.py        # Gemini AI服务
 │   │   ├── kafka_service.py         # Kafka服务
-│   │   ├── kafka_consumer.py        # Kafka消费者
-│   │   ├── field_extraction_consumer.py # 字段提取消费者
-│   │   ├── content_processor.py     # 内容处理器
+│   │   ├── callback_service.py      # 回调服务
 │   │   ├── minio_service.py         # MinIO服务
 │   │   └── processing_message_updater.py # 消息状态更新器
+│   ├── consumers/         # Kafka消费者
+│   │   ├── file_classification_consumer.py      # 批量文件分类消费者
+│   │   ├── field_extraction_consumer.py         # 批量字段提取消费者
+│   │   ├── simple_file_classification_consumer.py # 单文件分类消费者
+│   │   └── simple_field_extraction_consumer.py   # 单文件字段提取消费者
+│   ├── proto/             # gRPC协议文件
+│   │   ├── common_pb2.py  # 生成的Python类
+│   │   └── file_types.py  # 文件类型工具
 │   └── main.py            # 应用入口
-├── design/                 # 设计文档
-├── logs/                   # 日志文件
-├── utils/                  # 工具脚本
-│   └── clear_all_tables.sh # 数据库清理脚本
-├── requirements.txt        # Python依赖
+├── config/                # 配置文件
+│   └── instructions.yaml  # 提示词配置
+├── proto/                 # 原始proto文件
+│   └── common.proto       # gRPC定义
+├── logs/                  # 日志文件
+├── utils/                 # 工具脚本
+│   ├── clear_all_tables.sh # 数据库清理脚本
+│   └── clean_restart_topic.sh # Kafka主题清理脚本
+├── pyproject.toml         # 项目配置
 ├── startup.sh             # 启动脚本
 ├── shutdown.sh            # 停止脚本
 └── README.md              # 项目文档
@@ -410,25 +466,10 @@ cd feature_2_xiaogui_assistant
 3. **MinIO连接失败**: 检查MinIO服务状态和配置
 4. **Kafka连接失败**: 确认Redpanda服务状态
 5. **API阻塞**: 检查Kafka消费者是否阻塞事件循环
+6. **回调失败**: 检查回调URL是否可访问
 
 ### 日志查看
 ```bash
 # 查看应用日志
 tail -f logs/app.log
-
-# 查看启动日志
-./startup.sh
 ```
-
-## 🤝 贡献
-
-欢迎提交Issue和Pull Request！
-
-## 📄 许可证
-
-本项目采用MIT许可证。
-
-## 📞 联系方式
-
-- GitHub: [@wenbopan](https://github.com/wenbopan)
-- 项目地址: [feature_2_xiaogui_assistant](https://github.com/wenbopan/feature_2_xiaogui_assistant)

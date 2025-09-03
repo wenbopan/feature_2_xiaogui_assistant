@@ -3,18 +3,10 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
 import logging
-import os
-import shutil
-from pathlib import Path
-from datetime import datetime
 import time
-import json
-import uuid
 
-from app.models.database import get_db, Task, FileMetadata, FileClassification, ProcessingMessage, FileExtractionFailure, FieldExtraction
-from app.models.schemas import (
-    TaskCreate, TaskResponse, FileUploadResponse, ProcessingResult, 
-    FileMetadataResponse, ClassificationResult, FieldExtractionResult, FileContentResponse
+from app.models.database import get_db, Task, FileMetadata, ProcessingMessage
+from app.models.schemas import ( TaskResponse, FileUploadResponse, FileMetadataResponse, FileContentResponse
 )
 from app.services.file_service import file_service
 from app.services.simple_file_service import simple_file_service
