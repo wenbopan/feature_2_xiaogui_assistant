@@ -27,7 +27,6 @@ test_backend:
     - pip install uv
     - uv sync
   script:
-    - source .venv/bin/activate
     - python -m pytest tests/ || echo "No tests found, skipping..."
     - python -m flake8 app/ || echo "Linting completed"
   only:
