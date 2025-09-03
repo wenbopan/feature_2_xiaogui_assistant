@@ -7,26 +7,17 @@ stages:
   - deploy
 
 variables:
-  # 项目配置
   PROJECT_NAME: "hello-siling-classify-and-extract"
-  
-  # Docker 配置
   DOCKER_DRIVER: overlay2
   DOCKER_TLS_CERTDIR: "/certs"
-  
-  # 镜像配置
   BACKEND_IMAGE: $CI_REGISTRY_IMAGE/backend
   FRONTEND_IMAGE: $CI_REGISTRY_IMAGE/frontend
-  
-  # 缓存配置
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
 
-# 缓存配置
 cache:
   paths:
     - .cache/pip/
 
-# 测试阶段
 test_backend:
   stage: test
   image: python:3.11-slim
@@ -44,7 +35,6 @@ test_backend:
     - develop
     - merge_requests
 
-# 构建并推送后端镜像
 build_backend_image:
   stage: build
   image: docker:latest
@@ -62,7 +52,6 @@ build_backend_image:
     - main
     - develop
 
-# 构建并推送前端镜像
 build_frontend_image:
   stage: build
   image: docker:latest
@@ -80,18 +69,12 @@ build_frontend_image:
     - main
     - develop
 
-# 部署通知 (镜像已推送到注册表，等待webhook触发服务器更新)
 deploy_notification:
   stage: deploy
   image: alpine:latest
   script:
-    - echo "🎉 Docker镜像构建完成并推送到GitLab注册表"
-    - echo "📦 后端镜像: $BACKEND_IMAGE:latest"
-    - echo "📦 前端镜像: $FRONTEND_IMAGE:latest"
-    - echo "🔗 注册表地址: $CI_REGISTRY_IMAGE"
-    - echo "⏳ 等待webhook触发服务器更新..."
+    - echo "Docker images built and pushed to GitLab registry"
   only:
     - main
     - develop
-
 
