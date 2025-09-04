@@ -8,6 +8,15 @@ echo "🚀 开始设置服务器部署环境..."
 
 # 更新系统包
 echo "📦 更新系统包..."
+# 配置阿里云 apt 镜像源
+sudo cp /etc/apt/sources.list /etc/apt/sources.list.backup
+sudo tee /etc/apt/sources.list > /dev/null << 'EOF'
+deb https://mirrors.aliyun.com/ubuntu/ focal main restricted universe multiverse
+deb https://mirrors.aliyun.com/ubuntu/ focal-security main restricted universe multiverse
+deb https://mirrors.aliyun.com/ubuntu/ focal-updates main restricted universe multiverse
+deb https://mirrors.aliyun.com/ubuntu/ focal-backports main restricted universe multiverse
+EOF
+
 sudo apt update && sudo apt upgrade -y
 
 # 安装必要的系统依赖
@@ -17,7 +26,6 @@ sudo apt install -y \
     python3.12-venv \
     python3.12-dev \
     python3-pip \
-    nginx \
     postgresql \
     postgresql-contrib \
     curl \
@@ -27,10 +35,79 @@ sudo apt install -y \
     unzip \
     systemd
 
+# 配置 pip 使用阿里云镜像
+echo "🐍 配置 pip 使用阿里云镜像..."
+mkdir -p ~/.pip
+cat > ~/.pip/pip.conf << 'EOF'
+[global]
+index-url = https://mirrors.aliyun.com/pypi/simple/
+trusted-host = mirrors.aliyun.com
+[install]
+trusted-host = mirrors.aliyun.com
+EOF
+
 # 安装 uv (Python 包管理器)
-echo "🐍 安装 uv..."
-curl -LsSf https://astral.sh/uv/install.sh | sh
-source $HOME/.cargo/env
+echo "🐍 使用阿里云镜像安装 uv..."
+if pip3 install uv; then
+    echo "✅ uv 安装成功"
+else
+    echo "❌ 阿里云镜像安装失败，尝试官方安装脚本..."
+    if curl -LsSf https://astral.sh/uv/install.sh | sh; then
+        echo "✅ uv 安装成功"
+        if [ -f "$HOME/.cargo/env" ]; then
+            source $HOME/.cargo/env
+        else
+            export PATH="$HOME/.cargo/bin:$PATH"
+            echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc
+        fi
+    else
+        echo "❌ uv 安装失败，请检查网络连接"
+        exit 1
+    fi
+fi
+
+# 验证 uv 安装
+if command -v uv >/dev/null 2>&1; then
+    echo "✅ uv 已正确安装: $(uv --version)"
+else
+    echo "❌ uv 安装验证失败"
+    exit 1
+fi
+
+# 检查 Docker 是否已安装
+echo "🐳 检查 Docker 安装状态..."
+if command -v docker >/dev/null 2>&1; then
+    echo "✅ Docker 已安装: $(docker --version)"
+    # 确保用户在 docker 组中
+    if ! groups $USER | grep -q docker; then
+        echo "🔧 添加用户到 docker 组..."
+        sudo usermod -aG docker $USER
+        echo "⚠️  请重新登录或运行 'newgrp docker' 以使权限生效"
+    fi
+else
+    echo "🐳 安装 Docker..."
+    # 配置 Docker 使用阿里云镜像
+    sudo mkdir -p /etc/docker
+    sudo tee /etc/docker/daemon.json > /dev/null << 'EOF'
+{
+  "registry-mirrors": [
+    "https://mirror.ccs.tencentyun.com",
+    "https://docker.mirrors.ustc.edu.cn",
+    "https://reg-mirror.qiniu.com"
+  ]
+}
+EOF
+
+    # 安装 Docker
+    curl -fsSL https://get.docker.com -o get-docker.sh
+    sudo sh get-docker.sh
+    sudo usermod -aG docker $USER
+    rm get-docker.sh
+
+    # 重启 Docker 服务
+    sudo systemctl restart docker
+    echo "✅ Docker 安装完成"
+fi
 
 # 创建部署目录
 echo "📁 创建部署目录..."
@@ -46,42 +123,11 @@ GRANT ALL PRIVILEGES ON DATABASE legal_docs_dev TO legal_user;
 \q
 EOF
 
-# 配置 Nginx
-echo "🌐 配置 Nginx..."
-sudo tee /etc/nginx/sites-available/hello-siling << 'EOF'
-server {
-    listen 80;
-    server_name _;
-    
-    # 前端静态文件 - 调试界面
-    location / {
-        root /var/www/html/hello-siling;
-        index index.html;
-        try_files $uri $uri/ /index.html;
-    }
-    
-    # 后端 API 代理
-    location /api/ {
-        proxy_pass http://localhost:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-    
-    # 健康检查
-    location /health {
-        proxy_pass http://localhost:8000/health;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-}
-EOF
-
-# 启用站点
-sudo ln -sf /etc/nginx/sites-available/hello-siling /etc/nginx/sites-enabled/
-sudo rm -f /etc/nginx/sites-enabled/default
-sudo nginx -t && sudo systemctl reload nginx
+# 跳过 Nginx 配置 - 使用 Docker 容器直接提供服务
+echo "🐳 使用 Docker 容器直接提供服务..."
+echo "   - 前端: http://$(hostname -I | awk '{print $1}'):3000"
+echo "   - 后端: http://$(hostname -I | awk '{print $1}'):8001"
+echo "   - Webhook: http://$(hostname -I | awk '{print $1}'):8080"
 
 # 创建 systemd 服务文件
 echo "⚙️ 创建 systemd 服务..."
@@ -154,11 +200,10 @@ EOF
 echo "✅ 服务器设置完成！"
 echo ""
 echo "📋 下一步操作："
-echo "1. 复制 .env.template 到 .env 并配置实际的环境变量"
+echo "1. 复制 env.template 到 .env 并配置实际的环境变量"
 echo "2. 启动 PostgreSQL: sudo systemctl start postgresql"
-echo "3. 启动 Nginx: sudo systemctl start nginx"
-echo "4. 配置 GitLab CI/CD 变量"
-echo "5. 运行首次部署"
+echo "3. 配置 GitLab CI/CD 变量"
+echo "4. 运行首次部署"
 echo ""
 echo "🔧 服务管理命令："
 echo "- 查看后端服务状态: sudo systemctl status hello-siling-backend"

@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+import os
 import logging
 import uvicorn
 import threading
@@ -438,10 +439,14 @@ async def get_kafka_status():
         raise HTTPException(status_code=500, detail=f"获取Kafka状态失败: {str(e)}")
 
 if __name__ == "__main__":
+    # 在生产环境中禁用reload模式，避免文件监控导致容器不健康
+    # 只有在设置了 RELOAD_MODE=true 环境变量时才启用reload
+    reload_mode = os.getenv("RELOAD_MODE", "false").lower() == "true"
+    
     uvicorn.run(
         "app.main:app",
         host=settings.app_host,
         port=settings.app_port,
-        reload=True,
+        reload=reload_mode,
         log_level=settings.log_level.lower()
     )
