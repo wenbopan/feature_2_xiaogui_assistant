@@ -35,10 +35,11 @@ class FieldExtractionConsumer:
             # 创建消费者
             from kafka import KafkaConsumer
             import json
+            from app.config import settings
             
             self.consumer = KafkaConsumer(
                 self.topic,
-                bootstrap_servers=['localhost:9092'],
+                bootstrap_servers=[settings.kafka_bootstrap_servers],
                 value_deserializer=lambda m: json.loads(m.decode('utf-8')),
                 key_deserializer=lambda m: m.decode('utf-8') if m else None,
                 auto_offset_reset='earliest',

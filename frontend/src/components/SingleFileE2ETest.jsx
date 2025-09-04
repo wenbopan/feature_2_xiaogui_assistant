@@ -1,8 +1,8 @@
 import { useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import './CallbackTest.css'
+import './SingleFileE2ETest.css'
 
-function CallbackTest() {
+function SingleFileE2ETest() {
   const [callbackData, setCallbackData] = useState([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -92,7 +92,7 @@ function CallbackTest() {
 
   const checkCallbackResult = async (fileId) => {
     try {
-      const response = await fetch(`http://localhost:8000/api/v1/callbacks/results/${fileId}`)
+      const response = await fetch(`http://localhost:8001/api/v1/callbacks/results/${fileId}`)
       if (response.ok) {
         const result = await response.json()
         const currentCount = result.results ? result.results.length : 0
@@ -185,9 +185,9 @@ function CallbackTest() {
       classifyFormData.append('file_content', selectedFile)
       classifyFormData.append('file_type', getFileExtension(selectedFile.name))
       classifyFormData.append('file_id', fileId)
-      classifyFormData.append('callback_url', 'http://localhost:8000/api/v1/callbacks/classify-file')
+      classifyFormData.append('callback_url', 'http://localhost:8001/api/v1/callbacks/classify-file')
 
-      const classifyResponse = await fetch('http://localhost:8000/api/v1/files/classify', {
+      const classifyResponse = await fetch('http://localhost:8001/api/v1/files/classify', {
         method: 'POST',
         body: classifyFormData
       })
@@ -245,9 +245,9 @@ function CallbackTest() {
       extractFormData.append('file_content', selectedFile)
       extractFormData.append('file_type', getFileExtension(selectedFile.name))
       extractFormData.append('file_id', fileId)
-      extractFormData.append('callback_url', 'http://localhost:8000/api/v1/callbacks/extract-file')
+      extractFormData.append('callback_url', 'http://localhost:8001/api/v1/callbacks/extract-file')
 
-      const extractResponse = await fetch('http://localhost:8000/api/v1/files/extract-fields', {
+      const extractResponse = await fetch('http://localhost:8001/api/v1/files/extract-fields', {
         method: 'POST',
         body: extractFormData
       })
@@ -465,7 +465,7 @@ function CallbackTest() {
         <div className="test-footer">
           <div className="status-info">
             <span className="status-indicator">✅ Connected</span>
-            <span>Backend: localhost:8000</span>
+            <span>Backend: localhost:8001</span>
             <span>E2E Tests: {callbackData.length}</span>
           </div>
         </div>
@@ -474,4 +474,4 @@ function CallbackTest() {
   )
 }
 
-export default CallbackTest
+export default SingleFileE2ETest
