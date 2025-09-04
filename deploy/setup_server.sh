@@ -13,9 +13,9 @@ sudo apt update && sudo apt upgrade -y
 # 安装必要的系统依赖
 echo "🔧 安装系统依赖..."
 sudo apt install -y \
-    python3.11 \
-    python3.11-venv \
-    python3.11-dev \
+    python3.12 \
+    python3.12-venv \
+    python3.12-dev \
     python3-pip \
     nginx \
     postgresql \
