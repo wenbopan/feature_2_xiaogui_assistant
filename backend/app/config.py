@@ -7,36 +7,35 @@ import logging
 logger = logging.getLogger(__name__)
 
 class Settings(BaseSettings):
-    # MinIO 配置
+    # MinIO 配置 - Production defaults for containerized deployment
     minio_endpoint: str = "localhost:9000"
     minio_access_key: str = "admin"
     minio_secret_key: str = "password123"
     minio_bucket: str = "legal-docs"
     minio_secure: bool = False
     
-    # Kafka 配置
+    # Kafka 配置 - Production defaults for containerized deployment
     kafka_bootstrap_servers: str = "localhost:9092"
     kafka_topic_prefix: str = "legal"
     
-    # Gemini 配置
-    gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-pro"
+    # Gemini 配置 - Must be set via environment variable for security
+    gemini_api_key: str = ""  # Will be set via environment variable
+    gemini_model: str = "gemini-1.5-flash"
     
-    # 数据库配置
-    # 优先使用环境变量DATABASE_URL，如果没有则使用PostgreSQL配置构建
-    database_url: str = ""
+    # 数据库配置 - Production defaults for containerized deployment
+    database_url: str = "postgresql://panwenbo:@localhost:5432/legal_docs_dev"
     
     # PostgreSQL 配置（当database_url为空时使用）
     postgres_host: str = "localhost"
     postgres_port: int = 5432
-    postgres_user: str = "panwenbo"  # 改为当前用户
-    postgres_password: str = ""  # 当前用户通常不需要密码
+    postgres_user: str = "panwenbo"
+    postgres_password: str = ""
     postgres_db: str = "legal_docs_dev"
     
-    # 应用配置
+    # 应用配置 - Production defaults
     log_level: str = "INFO"
     app_host: str = "0.0.0.0"
-    app_port: int = 8000
+    app_port: int = 8001
     
     # 重试配置
     retry_max_attempts: int = 3
