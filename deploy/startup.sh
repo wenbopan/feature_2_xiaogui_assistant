@@ -103,11 +103,13 @@ log_info "加载预保存的Docker镜像..."
 docker load -i postgres-15-alpine.tar &
 docker load -i minio-latest.tar &
 docker load -i redpanda-latest.tar &
+docker load -i hello-siling-backend.tar &
+docker load -i hello-siling-frontend.tar &
 wait
 
-# 构建并启动所有服务（后台运行）
-log_info "构建并启动服务..."
-docker-compose -f docker-compose.aliyun.yml up --build -d
+# 启动所有服务（后台运行）
+log_info "启动服务..."
+docker-compose -f docker-compose.aliyun.yml up -d
 
 # 等待服务启动
 log_info "等待服务启动..."
@@ -123,10 +125,9 @@ log_info "前端访问地址: http://localhost:3000"
 log_info "后端API地址: http://localhost:8001"
 log_info "MinIO控制台: http://localhost:9001 (admin/password123)"
 log_info ""
-log_info "查看日志: docker-compose -f docker-compose.aliyun.yml logs -f"
-log_info "停止服务: docker-compose -f docker-compose.aliyun.yml down"
-log_info "按 Ctrl+C 停止监控并清理服务"
-
-# 监控日志
-log_info "开始监控服务日志（按 Ctrl+C 停止）..."
-docker-compose -f docker-compose.aliyun.yml logs -f
+log_info "服务已在后台运行，您可以安全地断开SSH连接"
+log_info ""
+log_info "管理命令:"
+log_info "  查看日志: docker-compose -f docker-compose.aliyun.yml logs -f"
+log_info "  停止服务: docker-compose -f docker-compose.aliyun.yml down"
+log_info "  查看状态: docker-compose -f docker-compose.aliyun.yml ps"
