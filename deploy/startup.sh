@@ -39,11 +39,10 @@ cleanup() {
     
     # 检查端口是否释放
     log_info "检查端口释放情况..."
-    if lsof -i :5432 -i :6379 -i :9000 -i :9001 -i :9092 -i :8001 -i :3000 >/dev/null 2>&1; then
+    if lsof -i :5432 -i :9000 -i :9001 -i :9092 -i :8001 -i :3000 >/dev/null 2>&1; then
         log_warning "部分端口仍被占用，正在强制清理..."
         # 强制停止可能残留的进程
         pkill -f "postgres" 2>/dev/null || true
-        pkill -f "redis" 2>/dev/null || true
         pkill -f "minio" 2>/dev/null || true
         pkill -f "redpanda" 2>/dev/null || true
     fi
@@ -68,14 +67,13 @@ if lsof -i :5432 -i :6379 -i :9000 -i :9001 -i :9092 -i :8001 -i :3000 >/dev/nul
     
     # 停止本地服务
     brew services stop postgresql@14 2>/dev/null || true
-    brew services stop redis 2>/dev/null || true
     pkill -f "minio" 2>/dev/null || true
     
     # 等待端口释放
     sleep 3
     
     # 再次检查
-    if lsof -i :5432 -i :6379 -i :9000 -i :9001 -i :9092 -i :8001 -i :3000 >/dev/null 2>&1; then
+    if lsof -i :5432 -i :9000 -i :9001 -i :9092 -i :8001 -i :3000 >/dev/null 2>&1; then
         log_error "端口仍被占用，请手动清理后重试"
         exit 1
     fi
@@ -100,7 +98,16 @@ fi
 # 启动服务
 log_info "启动 Hello Siling 服务..."
 
+# 预拉取基础镜像以加速构建
+log_info "预拉取基础镜像..."
+docker pull postgres:15-alpine &
+docker pull minio/minio:latest &
+docker pull redpandadata/redpanda:v24.1.1 &
+docker pull nginx:alpine &
+wait
+
 # 构建并启动所有服务（后台运行）
+log_info "构建并启动服务..."
 docker-compose -f docker-compose.aliyun.yml up --build -d
 
 # 等待服务启动
