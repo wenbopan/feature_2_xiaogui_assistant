@@ -1,9 +1,5 @@
 version: '3.8'
 
-# Load environment variables from docker.env file
-env_file:
-  - docker.env
-
 services:
   # PostgreSQL 数据库
   postgres:
@@ -109,6 +105,8 @@ services:
     container_name: hello-siling-backend
     ports:
       - "8001:8001"
+    env_file:
+      - docker.env
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - APP_HOST=0.0.0.0
@@ -152,6 +150,8 @@ services:
     container_name: hello-siling-frontend
     ports:
       - "3000:3000"
+    env_file:
+      - docker.env
     depends_on:
       - backend
     restart: unless-stopped
