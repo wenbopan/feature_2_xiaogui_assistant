@@ -8,6 +8,9 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
+# Configure npm to use Chinese mirror for faster installation
+RUN npm config set registry https://registry.npmmirror.com/
+
 # Install all dependencies (including dev dependencies for build)
 RUN npm ci
 
@@ -27,21 +30,28 @@ ENV VITE_BACKEND_PROTOCOL=$VITE_BACKEND_PROTOCOL
 # Build the application
 RUN npm run build
 
-# Production stage: Serve with nginx
-FROM nginx:alpine
+# Production stage: Serve with Vite Preview
+FROM node:20-alpine
+
+# Install curl for health checks
+RUN apk add --no-cache curl
+
+# Set working directory
+WORKDIR /app
 
 # Copy built files from build stage
-COPY --from=build /app/dist /usr/share/nginx/html
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/package*.json ./
 
-# Copy custom nginx configuration
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Install only production dependencies
+RUN npm ci --only=production
 
 # Expose port
 EXPOSE 3000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:3000/ || exit 1
 
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"]
+# Start Vite preview server
+CMD ["npx", "vite", "preview", "--host", "0.0.0.0", "--port", "3000"]
