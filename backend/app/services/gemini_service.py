@@ -29,6 +29,14 @@ class GeminiService:
             from app.config import CLASSIFICATION_PROMPT
             prompt = CLASSIFICATION_PROMPT.format(filename=filename, file_type=file_type)
             
+            # 记录发送给Gemini的分类提示词（用于调试）
+            logger.info(f"=== GEMINI CLASSIFICATION PROMPT ===")
+            logger.info(f"Filename: {filename}")
+            logger.info(f"File type: {file_type}")
+            logger.info(f"Prompt length: {len(prompt)} characters")
+            logger.info(f"Full prompt:\n{prompt}")
+            logger.info("=== END GEMINI CLASSIFICATION PROMPT ===")
+            
             # 调用Gemini API - 统一使用视觉模型处理所有文件类型
             if file_type.lower() in ['.jpg', '.jpeg', '.png', '.pdf']:
                 # 图片和PDF文件都使用多模态视觉模型
@@ -128,6 +136,14 @@ class GeminiService:
             
             # 构建提取提示词
             prompt = build_extraction_prompt(category)
+            
+            # 记录发送给Gemini的完整提示词（用于调试热交换功能）
+            logger.info(f"=== GEMINI FIELD EXTRACTION PROMPT FOR {category.upper()} ===")
+            logger.info(f"Filename: {filename}")
+            logger.info(f"File type: {file_type}")
+            logger.info(f"Prompt length: {len(prompt)} characters")
+            logger.info(f"Full prompt:\n{prompt}")
+            logger.info("=== END GEMINI FIELD EXTRACTION PROMPT ===")
             
             # 调用Gemini API - 完全参照内容分类的实现，统一使用视觉模型
             if file_type.lower() in ['.jpg', '.jpeg', '.png', '.pdf']:

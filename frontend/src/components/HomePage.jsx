@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom'
 import './HomePage.css'
 
 function HomePage() {
@@ -14,49 +13,49 @@ function HomePage() {
           <div className="feature-card">
             <h3>📄 文档查看器</h3>
             <p>查看已处理的文档和提取结果</p>
-            <Link to="/legal-doc/files/view-content" className="feature-link">
+            <a href="/legal-doc/files/view-content" className="feature-link" target="_blank" rel="noopener noreferrer">
               进入文档查看器
-            </Link>
+            </a>
           </div>
 
           <div className="feature-card">
             <h3>📤 文件上传</h3>
             <p>批量上传文档进行处理</p>
-            <Link to="/legal-doc/upload" className="feature-link">
+            <a href="/legal-doc/upload" className="feature-link" target="_blank" rel="noopener noreferrer">
               上传文件
-            </Link>
+            </a>
           </div>
 
           <div className="feature-card">
             <h3>⚙️ 处理状态</h3>
             <p>查看文档处理进度和状态</p>
-            <Link to="/legal-doc/processing" className="feature-link">
+            <a href="/legal-doc/processing" className="feature-link" target="_blank" rel="noopener noreferrer">
               查看处理状态
-            </Link>
+            </a>
           </div>
 
           <div className="feature-card">
             <h3>📊 仪表板</h3>
             <p>查看任务详情和统计信息</p>
-            <Link to="/legal-doc/dashboard" className="feature-link">
+            <a href="/legal-doc/dashboard" className="feature-link" target="_blank" rel="noopener noreferrer">
               打开仪表板
-            </Link>
+            </a>
           </div>
 
           <div className="feature-card">
             <h3>📝 指令管理</h3>
             <p>管理分类和提取指令</p>
-            <Link to="/legal-doc/instructions" className="feature-link">
+            <a href="/legal-doc/instructions" className="feature-link" target="_blank" rel="noopener noreferrer">
               管理指令
-            </Link>
+            </a>
           </div>
 
           <div className="feature-card highlight">
             <h3>🧪 单文件 E2E 测试</h3>
             <p>测试文档分类和字段提取的完整流程</p>
-            <Link to="/legal-doc/single-file-e2e-test" className="feature-link">
+            <a href="/legal-doc/single-file-e2e-test" className="feature-link" target="_blank" rel="noopener noreferrer">
               开始测试
-            </Link>
+            </a>
           </div>
         </div>
 
@@ -80,7 +79,7 @@ function HomePage() {
             </div>
             <div className="api-card">
               <h4>回调结果 API</h4>
-              <code>GET /api/v1/callbacks/results/{fileId}</code>
+              <code>GET /api/v1/callbacks/results/&#123;fileId&#125;</code>
               <p>获取异步处理结果</p>
             </div>
           </div>

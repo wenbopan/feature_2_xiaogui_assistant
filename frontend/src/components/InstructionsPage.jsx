@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { API_ENDPOINTS, getBackendInfo } from '../config/api'
 import './InstructionsPage.css'
 
 function InstructionsPage() {
   const [instructions, setInstructions] = useState({
-    invoice: '',
-    lease: '',
-    amendment: '',
-    bill: '',
-    bank_receipt: ''
+    '发票': '',
+    '租赁协议': '',
+    '变更/解除协议': '',
+    '账单': '',
+    '银行回单': ''
   })
   
   const [originalInstructions, setOriginalInstructions] = useState({})
@@ -31,7 +32,7 @@ function InstructionsPage() {
       setIsLoading(true)
       setError(null)
       
-      const response = await fetch('http://localhost:8000/api/v1/config/instructions')
+      const response = await fetch(API_ENDPOINTS.INSTRUCTIONS)
       if (!response.ok) {
         throw new Error(`Failed to load instructions: ${response.status}`)
       }
@@ -41,11 +42,11 @@ function InstructionsPage() {
       if (data.success && data.memory_instructions) {
         // Use memory_instructions directly (these are the current active instructions)
         const loadedInstructions = {
-          invoice: data.memory_instructions.invoice || '',
-          lease: data.memory_instructions.lease || '',
-          amendment: data.memory_instructions.amendment || '',
-          bill: data.memory_instructions.bill || '',
-          bank_receipt: data.memory_instructions.bank_receipt || ''
+          '发票': data.memory_instructions['发票'] || '',
+          '租赁协议': data.memory_instructions['租赁协议'] || '',
+          '变更/解除协议': data.memory_instructions['变更/解除协议'] || '',
+          '账单': data.memory_instructions['账单'] || '',
+          '银行回单': data.memory_instructions['银行回单'] || ''
         }
         
         setInstructions(loadedInstructions)
@@ -79,7 +80,7 @@ function InstructionsPage() {
       setError(null)
       setSuccess(null)
       
-      const response = await fetch('http://localhost:8000/api/v1/config/instructions/hot-swap', {
+      const response = await fetch(API_ENDPOINTS.INSTRUCTIONS_HOT_SWAP, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -124,7 +125,7 @@ function InstructionsPage() {
       setError(null)
       setSuccess(null)
       
-      const response = await fetch('http://localhost:8000/api/v1/config/instructions/reset', {
+      const response = await fetch(API_ENDPOINTS.INSTRUCTIONS_RESET, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -159,11 +160,11 @@ function InstructionsPage() {
   }
 
   const categories = [
-    { key: 'invoice', name: 'Invoice', chinese: '发票', icon: '📄' },
-    { key: 'lease', name: 'Lease', chinese: '租赁协议', icon: '📄' },
-    { key: 'amendment', name: 'Amendment', chinese: '变更/解除协议', icon: '📄' },
-    { key: 'bill', name: 'Bill', chinese: '账单', icon: '📄' },
-    { key: 'bank_receipt', name: 'Bank Receipt', chinese: '银行回单', icon: '📄' }
+    { key: '发票', name: 'Invoice', chinese: '发票', icon: '📄' },
+    { key: '租赁协议', name: 'Lease', chinese: '租赁协议', icon: '📄' },
+    { key: '变更/解除协议', name: 'Amendment', chinese: '变更/解除协议', icon: '📄' },
+    { key: '账单', name: 'Bill', chinese: '账单', icon: '📄' },
+    { key: '银行回单', name: 'Bank Receipt', chinese: '银行回单', icon: '📄' }
   ]
 
   if (isLoading) {
@@ -264,7 +265,7 @@ function InstructionsPage() {
           <div className="status-info">
             <span className="status-indicator">✅ Connected</span>
             <span>Last Sync: {new Date().toLocaleString()}</span>
-            <span>Backend: localhost:8000</span>
+            <span>Backend: {getBackendInfo().host}:{getBackendInfo().port}</span>
           </div>
         </div>
       </div>

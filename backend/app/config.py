@@ -104,8 +104,8 @@ class InstructionsConfigManager:
                 elif isinstance(config, str):
                     self._memory_instructions[category] = config
             
-            # 验证所有必需的分类都存在
-            required_categories = ['invoice', 'lease', 'amendment', 'bill', 'bank_receipt']
+            # 验证所有必需的分类都存在 - 使用中文分类名
+            required_categories = ['发票', '租赁协议', '变更/解除协议', '账单', '银行回单']
             missing_categories = [cat for cat in required_categories if cat not in self._memory_instructions]
             
             if missing_categories:
@@ -173,8 +173,8 @@ class InstructionsConfigManager:
             
         logger.info(f"Hot swapping instructions for categories: {list(new_instructions.keys())}")
         
-        # 验证输入
-        required_categories = ['invoice', 'lease', 'amendment', 'bill', 'bank_receipt']
+        # 验证输入 - 使用中文分类名
+        required_categories = ['发票', '租赁协议', '变更/解除协议', '账单', '银行回单']
         for category in required_categories:
             if category not in new_instructions:
                 raise ValueError(f"Missing required category: {category}")

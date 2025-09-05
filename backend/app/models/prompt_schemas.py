@@ -20,18 +20,18 @@ class InvoiceFields(BaseExtractionFields):
     """发票字段"""
     购买方名称: Optional[str] = Field(None, description="购买方名称")
     开票日期: Optional[str] = Field(None, description="开票日期，格式：YYYY-MM-DD")
-    含税金额: Optional[float] = Field(None, description="含税金额，数字格式")
+    含税金额: Optional[str] = Field(None, description="含税金额")
     所属租期: Optional[str] = Field(None, description="所属租期")
     楼栋房号: Optional[str] = Field(None, description="楼栋&房号")
     发票号码: Optional[str] = Field(None, description="发票号码")
     备注: Optional[str] = Field(None, description="备注信息")
-    税率: Optional[float] = Field(None, description="税率，数字格式")
+    税率: Optional[str] = Field(None, description="税率，可包含百分号等符号")
 
 class LeaseAgreementFields(BaseExtractionFields):
     """租赁协议字段"""
     承租人名称: Optional[str] = Field(None, description="承租人名称")
     楼栋房号: Optional[str] = Field(None, description="楼栋&房号")
-    租赁计费面积: Optional[float] = Field(None, description="租赁(计费)面积，数字格式")
+    租赁计费面积: Optional[str] = Field(None, description="租赁(计费)面积")
     租赁期起止: Optional[str] = Field(None, description="租赁期起止")
     免租期条款: Optional[str] = Field(None, description="免租期条款")
     租金条款递增: Optional[str] = Field(None, description="租金条款(递增)")
@@ -44,7 +44,7 @@ class AmendmentTerminationFields(BaseExtractionFields):
     """变更/解除协议字段"""
     承租人名称: Optional[str] = Field(None, description="承租人名称")
     楼栋房号: Optional[str] = Field(None, description="楼栋&房号")
-    租赁计费面积: Optional[float] = Field(None, description="租赁(计费)面积，数字格式")
+    租赁计费面积: Optional[str] = Field(None, description="租赁(计费)面积")
     涉及租赁期免租期账期押金条款的变更情况: Optional[str] = Field(None, description="涉及租赁期、免租期、账期、押金条款的变更情况")
     涉及租金条款的变更情况: Optional[str] = Field(None, description="涉及租金条款的变更情况")
     签署日期: Optional[str] = Field(None, description="签署日期，格式：YYYY-MM-DD")
@@ -54,9 +54,9 @@ class BillFields(BaseExtractionFields):
     """账单字段"""
     承租人名称: Optional[str] = Field(None, description="承租人名称")
     楼栋房号: Optional[str] = Field(None, description="楼栋&房号")
-    含税金额: Optional[float] = Field(None, description="含税金额，数字格式")
+    含税金额: Optional[str] = Field(None, description="含税金额")
     所属租期: Optional[str] = Field(None, description="所属租期")
-    租赁计费面积: Optional[float] = Field(None, description="租赁(计费)面积，数字格式")
+    租赁计费面积: Optional[str] = Field(None, description="租赁(计费)面积，可包含单位如平方米等")
     预收租金情况: Optional[str] = Field(None, description="预收租金情况")
     补缴上期租金情况: Optional[str] = Field(None, description="补缴上期租金情况")
     同时缴纳押金情况: Optional[str] = Field(None, description="同时缴纳押金情况")
@@ -67,7 +67,7 @@ class BankReceiptFields(BaseExtractionFields):
     """银行回单字段"""
     付款人名称: Optional[str] = Field(None, description="付款人名称")
     流水日期: Optional[str] = Field(None, description="流水日期，格式：YYYY-MM-DD")
-    转账金额: Optional[float] = Field(None, description="转账金额，数字格式")
+    转账金额: Optional[str] = Field(None, description="转账金额，可包含货币符号如CNY、USD等")
     所属租期: Optional[str] = Field(None, description="所属租期")
     楼栋房号: Optional[str] = Field(None, description="楼栋&房号")
     回单号码: Optional[str] = Field(None, description="回单号码")

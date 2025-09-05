@@ -14,6 +14,16 @@ RUN npm ci
 # Copy source code
 COPY . .
 
+# Accept build arguments for environment variables
+ARG VITE_BACKEND_HOST=localhost
+ARG VITE_BACKEND_PORT=8001
+ARG VITE_BACKEND_PROTOCOL=http
+
+# Set environment variables for build
+ENV VITE_BACKEND_HOST=$VITE_BACKEND_HOST
+ENV VITE_BACKEND_PORT=$VITE_BACKEND_PORT
+ENV VITE_BACKEND_PROTOCOL=$VITE_BACKEND_PROTOCOL
+
 # Build the application
 RUN npm run build
 

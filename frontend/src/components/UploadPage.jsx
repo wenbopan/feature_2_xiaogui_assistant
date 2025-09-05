@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
+import { API_ENDPOINTS, getBackendInfo } from '../config/api'
 import './UploadPage.css'
 
 function UploadPage() {
@@ -124,7 +125,7 @@ function UploadPage() {
     })
 
     // Start the upload
-    xhr.open('POST', 'http://localhost:8000/api/v1/tasks/upload')
+    xhr.open('POST', API_ENDPOINTS.TASK_UPLOAD)
     xhr.send(uploadData)
   }
 

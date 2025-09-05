@@ -1,5 +1,9 @@
 version: '3.8'
 
+# Load environment variables from docker.env file
+env_file:
+  - docker.env
+
 services:
   # PostgreSQL 数据库
   postgres:
@@ -141,6 +145,10 @@ services:
     build:
       context: ../frontend
       dockerfile: Dockerfile
+      args:
+        - VITE_BACKEND_HOST=${VITE_BACKEND_HOST}
+        - VITE_BACKEND_PORT=${VITE_BACKEND_PORT}
+        - VITE_BACKEND_PROTOCOL=${VITE_BACKEND_PROTOCOL}
     container_name: hello-siling-frontend
     ports:
       - "3000:3000"

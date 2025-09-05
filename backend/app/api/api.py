@@ -720,8 +720,8 @@ async def hot_swap_instructions(instructions_data: dict):
     """热交换指令（更新内存中的指令）"""
     from app.config import instructions_manager
     try:
-        # 验证输入数据
-        required_categories = ['invoice', 'lease', 'amendment', 'bill', 'bank_receipt']
+        # 验证输入数据 - 使用中文分类名
+        required_categories = ['发票', '租赁协议', '变更/解除协议', '账单', '银行回单']
         for category in required_categories:
             if category not in instructions_data:
                 raise HTTPException(

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Link } from 'react-router-dom'
+import { API_ENDPOINTS, getBackendInfo } from '../config/api'
 import './ProcessingPage.css'
 
 function ProcessingPage() {
@@ -47,7 +48,7 @@ function ProcessingPage() {
       // Start field extraction if selected
       if (processingOptions.extractFields) {
         try {
-          const extractResponse = await fetch(`http://localhost:8000/api/v1/tasks/${taskIdNum}/extract-fields`, {
+          const extractResponse = await fetch(API_ENDPOINTS.TASK_EXTRACT_FIELDS(taskIdNum), {
             method: 'POST'
           })
           
@@ -66,7 +67,7 @@ function ProcessingPage() {
       // Start content processing (classification + renaming) if selected
       if (processingOptions.rename) {
         try {
-          const processResponse = await fetch(`http://localhost:8000/api/v1/${taskIdNum}/file-classification`, {
+          const processResponse = await fetch(API_ENDPOINTS.TASK_CLASSIFICATION(taskIdNum), {
             method: 'POST'
           })
           

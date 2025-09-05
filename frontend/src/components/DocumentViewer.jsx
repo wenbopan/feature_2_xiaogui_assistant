@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
+import { API_ENDPOINTS, getBackendInfo } from '../config/api'
 import SearchPanel from './SearchPanel'
 import FileContent from './FileContent'
 import ExtractedFields from './ExtractedFields'
@@ -36,11 +37,11 @@ function DocumentViewer() {
       relative_path: relativePath
     }
     
-    console.log('Sending request to:', 'http://localhost:8000/api/v1/files/view-content')
+    console.log('Sending request to:', API_ENDPOINTS.VIEW_CONTENT)
     console.log('Request body:', requestBody)
     
     try {
-      const response = await fetch('http://localhost:8000/api/v1/files/view-content', {
+      const response = await fetch(API_ENDPOINTS.VIEW_CONTENT, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

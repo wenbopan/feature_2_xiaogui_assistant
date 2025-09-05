@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
+import { API_ENDPOINTS, getBackendInfo } from '../config/api'
 import './SingleFileE2ETest.css'
 
 function SingleFileE2ETest() {
@@ -92,7 +93,7 @@ function SingleFileE2ETest() {
 
   const checkCallbackResult = async (fileId) => {
     try {
-      const response = await fetch(`http://localhost:8001/api/v1/callbacks/results/${fileId}`)
+      const response = await fetch(API_ENDPOINTS.CALLBACK_RESULTS(fileId))
       if (response.ok) {
         const result = await response.json()
         const currentCount = result.results ? result.results.length : 0
@@ -185,9 +186,9 @@ function SingleFileE2ETest() {
       classifyFormData.append('file_content', selectedFile)
       classifyFormData.append('file_type', getFileExtension(selectedFile.name))
       classifyFormData.append('file_id', fileId)
-      classifyFormData.append('callback_url', 'http://localhost:8001/api/v1/callbacks/classify-file')
+      classifyFormData.append('callback_url', API_ENDPOINTS.CALLBACK_CLASSIFY)
 
-      const classifyResponse = await fetch('http://localhost:8001/api/v1/files/classify', {
+      const classifyResponse = await fetch(API_ENDPOINTS.CLASSIFY, {
         method: 'POST',
         body: classifyFormData
       })
@@ -245,9 +246,9 @@ function SingleFileE2ETest() {
       extractFormData.append('file_content', selectedFile)
       extractFormData.append('file_type', getFileExtension(selectedFile.name))
       extractFormData.append('file_id', fileId)
-      extractFormData.append('callback_url', 'http://localhost:8001/api/v1/callbacks/extract-file')
+      extractFormData.append('callback_url', API_ENDPOINTS.CALLBACK_EXTRACT)
 
-      const extractResponse = await fetch('http://localhost:8001/api/v1/files/extract-fields', {
+      const extractResponse = await fetch(API_ENDPOINTS.EXTRACT_FIELDS, {
         method: 'POST',
         body: extractFormData
       })
@@ -465,7 +466,7 @@ function SingleFileE2ETest() {
         <div className="test-footer">
           <div className="status-info">
             <span className="status-indicator">✅ Connected</span>
-            <span>Backend: localhost:8001</span>
+            <span>Backend: {getBackendInfo().host}:{getBackendInfo().port}</span>
             <span>E2E Tests: {callbackData.length}</span>
           </div>
         </div>

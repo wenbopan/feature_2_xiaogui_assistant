@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
+import { API_ENDPOINTS, getBackendInfo } from '../config/api'
 import './Dashboard.css'
 
 function Dashboard() {
@@ -23,7 +24,7 @@ function Dashboard() {
 
   const fetchTaskInfo = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/api/v1/tasks/${taskId}`)
+      const response = await fetch(API_ENDPOINTS.TASK_DETAILS(taskId))
       if (response.ok) {
         const data = await response.json()
         setTaskInfo(data)
@@ -40,7 +41,7 @@ function Dashboard() {
   const fetchTaskStatus = async () => {
     try {
       // Fetch extraction progress
-      const extractResponse = await fetch(`http://localhost:8000/api/v1/tasks/${taskId}/extraction-progress`)
+      const extractResponse = await fetch(API_ENDPOINTS.TASK_EXTRACTION_PROGRESS(taskId))
       let extractData = null
       if (extractResponse.ok) {
         extractData = await extractResponse.json()
@@ -50,7 +51,7 @@ function Dashboard() {
       }
 
       // Fetch processing progress (renaming/classification)
-              const processResponse = await fetch(`http://localhost:8000/api/v1/${taskId}/file-classification-progress`)
+              const processResponse = await fetch(API_ENDPOINTS.TASK_CLASSIFICATION_PROGRESS(taskId))
       let processData = null
       if (processResponse.ok) {
         processData = await processResponse.json()
