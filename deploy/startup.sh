@@ -98,12 +98,11 @@ fi
 # 启动服务
 log_info "启动 Hello Siling 服务..."
 
-# 预拉取基础镜像以加速构建
-log_info "预拉取基础镜像..."
-docker pull postgres:15-alpine &
-docker pull minio/minio:latest &
-docker pull redpandadata/redpanda:v24.1.1 &
-docker pull nginx:alpine &
+# 加载预保存的Docker镜像
+log_info "加载预保存的Docker镜像..."
+docker load -i postgres-15-alpine.tar &
+docker load -i minio-latest.tar &
+docker load -i redpanda-latest.tar &
 wait
 
 # 构建并启动所有服务（后台运行）

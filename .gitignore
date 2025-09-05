@@ -99,3 +99,9 @@ frontend/.env.local
 frontend/.env.development.local
 frontend/.env.test.local
 frontend/.env.production.local
+
+# Docker images (large files for China deployment)
+*.tar
+postgres-*.tar
+minio-*.tar
+redpanda-*.tar

@@ -42,7 +42,7 @@ services:
 
   # Redpanda (Kafka 兼容)
   redpanda:
-    image: redpandadata/redpanda:v24.1.1
+    image: redpandadata/redpanda:latest
     container_name: hello-siling-redpanda
     ports:
       - "9092:9092"
