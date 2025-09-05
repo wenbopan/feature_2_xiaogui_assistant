@@ -100,8 +100,27 @@ fi
 # 启动服务
 log_info "启动 Hello Siling 服务..."
 
-# 构建并启动所有服务
-docker-compose -f docker-compose.aliyun.yml up --build
+# 构建并启动所有服务（后台运行）
+docker-compose -f docker-compose.aliyun.yml up --build -d
 
-# 如果正常退出（不是被信号中断），也进行清理
-cleanup
+# 等待服务启动
+log_info "等待服务启动..."
+sleep 10
+
+# 检查服务状态
+log_info "检查服务状态..."
+docker-compose -f docker-compose.aliyun.yml ps
+
+# 显示服务访问信息
+log_success "服务启动完成！"
+log_info "前端访问地址: http://localhost:3000"
+log_info "后端API地址: http://localhost:8001"
+log_info "MinIO控制台: http://localhost:9001 (admin/password123)"
+log_info ""
+log_info "查看日志: docker-compose -f docker-compose.aliyun.yml logs -f"
+log_info "停止服务: docker-compose -f docker-compose.aliyun.yml down"
+log_info "按 Ctrl+C 停止监控并清理服务"
+
+# 监控日志
+log_info "开始监控服务日志（按 Ctrl+C 停止）..."
+docker-compose -f docker-compose.aliyun.yml logs -f

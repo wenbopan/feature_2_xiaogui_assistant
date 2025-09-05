@@ -6,8 +6,8 @@ The Docker setup uses environment variables to configure the frontend to connect
 
 ### Configuration Files
 
-1. **`docker.env`** - Contains all environment variables for Docker Compose
-2. **`docker-compose.aliyun.yml`** - Docker Compose configuration that uses the environment file
+1. **`env.template`** - Template file containing all environment variables for Docker Compose
+2. **`docker-compose.aliyun.yml`** - Docker Compose configuration that uses the environment template
 
 ### Frontend Backend Configuration
 
@@ -30,7 +30,7 @@ VITE_BACKEND_PROTOCOL=http         # Protocol (http/https)
 
 #### Local Development (Docker)
 ```bash
-# docker.env
+# env.template
 VITE_BACKEND_HOST=backend
 VITE_BACKEND_PORT=8001
 VITE_BACKEND_PROTOCOL=http
@@ -40,7 +40,7 @@ VITE_BACKEND_PROTOCOL=http
 
 #### Production (External Backend)
 ```bash
-# docker.env
+# env.template
 VITE_BACKEND_HOST=your-backend-domain.com
 VITE_BACKEND_PORT=443
 VITE_BACKEND_PROTOCOL=https
@@ -48,7 +48,7 @@ VITE_BACKEND_PROTOCOL=https
 
 #### Custom Backend Port
 ```bash
-# docker.env
+# env.template
 VITE_BACKEND_HOST=backend
 VITE_BACKEND_PORT=8002
 VITE_BACKEND_PROTOCOL=http
@@ -56,7 +56,7 @@ VITE_BACKEND_PROTOCOL=http
 
 ### Usage
 
-1. **Update Configuration**: Edit `docker.env` with your desired backend settings
+1. **Update Configuration**: Edit `env.template` with your desired backend settings
 2. **Build and Run**: 
    ```bash
    cd deploy
