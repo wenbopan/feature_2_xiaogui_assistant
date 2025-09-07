@@ -6,6 +6,8 @@ const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth()
   const location = useLocation()
 
+  console.log('ProtectedRoute: isAuthenticated =', isAuthenticated, 'loading =', loading)
+
   // 如果还在加载中，显示加载状态
   if (loading) {
     return (

@@ -18,7 +18,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 USERS_DB = {
     "admin": {
         "username": "admin",
-        "hashed_password": "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",  # secret
+        "hashed_password": generate_password_hash("feature2@siling123"),  # secret
         "disabled": False,
     }
 }

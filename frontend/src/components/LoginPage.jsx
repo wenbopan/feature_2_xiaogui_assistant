@@ -1,9 +1,11 @@
 import React, { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
 import { API_ENDPOINTS } from '../config/api'
 import './LoginPage.css'
 
-const LoginPage = ({ onLogin }) => {
+const LoginPage = () => {
+  const { login } = useAuth()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -31,17 +33,18 @@ const LoginPage = ({ onLogin }) => {
 
       if (response.ok) {
         const data = await response.json()
-        // 保存token到localStorage
+        console.log('Login successful, token received:', data)
+        console.log('Redirect path:', redirectPath)
+        
+        // 先保存token到localStorage
         localStorage.setItem('access_token', data.access_token)
         localStorage.setItem('token_type', data.token_type)
         
-        // 调用父组件的登录回调
-        if (onLogin) {
-          onLogin(data)
-        }
-        
-        // 重定向到原来要访问的页面
+        // 立即跳转，让ProtectedRoute重新检查认证状态
         navigate(redirectPath, { replace: true })
+        
+        // 异步更新AuthContext状态
+        login(data)
       } else {
         const errorData = await response.json()
         setError(errorData.detail || '登录失败')
@@ -58,7 +61,7 @@ const LoginPage = ({ onLogin }) => {
     <div className="login-container">
       <div className="login-form-wrapper">
         <div className="login-header">
-          <h1>小桂助手</h1>
+          <h1>小硅助手</h1>
           <p>请登录以继续使用</p>
         </div>
         
@@ -99,11 +102,6 @@ const LoginPage = ({ onLogin }) => {
             {loading ? '登录中...' : '登录'}
           </button>
         </form>
-        
-        <div className="login-footer">
-          <p>默认账号: admin</p>
-          <p>默认密码: secret</p>
-        </div>
       </div>
     </div>
   )
