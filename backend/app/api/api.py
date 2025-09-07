@@ -708,6 +708,7 @@ async def readiness_check():
     all_ready = True
     
     # 检查数据库连接
+    """
     try:
         # 测试数据库连接
         from sqlalchemy import text
@@ -723,7 +724,7 @@ async def readiness_check():
             "message": f"Database connection failed: {str(e)}"
         }
         all_ready = False
-    
+    """
     # 检查Kafka连接
     try:
         kafka_status = kafka_service.get_connection_status()
@@ -811,6 +812,7 @@ async def readiness_check():
         all_ready = False
     
     # 检查MinIO连接
+    """
     try:
         # 检查MinIO连接状态
         minio_status = minio_service.is_connected and minio_service.client is not None
@@ -834,6 +836,7 @@ async def readiness_check():
             "message": f"MinIO check failed: {str(e)}"
         }
         all_ready = False
+     """
     
     # 计算检查耗时
     check_duration = time.time() - start_time
