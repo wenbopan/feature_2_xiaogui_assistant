@@ -16,6 +16,10 @@ export const API_ENDPOINTS = {
   // Health check
   HEALTH: `${BASE_URL}/health`,
   
+  // Authentication
+  LOGIN: `${BASE_URL}/api/v1/auth/login`,
+  ME: `${BASE_URL}/api/v1/auth/me`,
+  
   // File operations
   CLASSIFY: `${BASE_URL}/api/v1/files/classify`,
   EXTRACT_FIELDS: `${BASE_URL}/api/v1/files/extract-fields`,

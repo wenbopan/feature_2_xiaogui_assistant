@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from fastapi.responses import JSONResponse
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
+from datetime import timedelta
 import logging
 import time
 
@@ -13,9 +15,38 @@ from app.services.simple_file_service import simple_file_service
 from app.services.kafka_service import kafka_service
 from app.services.minio_service import minio_service
 from app.config import settings
+from app.auth import (
+    authenticate_user, create_access_token, get_current_active_user, 
+    Token, User, ACCESS_TOKEN_EXPIRE_MINUTES
+)
 
 router = APIRouter(prefix="/v1", tags=["api"])
 logger = logging.getLogger(__name__)
+
+# ============================================================================
+# AUTHENTICATION ENDPOINTS
+# ============================================================================
+
+@router.post("/auth/login", response_model=Token)
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    """用户登录接口"""
+    user = authenticate_user(form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.username}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@router.get("/auth/me", response_model=User)
+async def read_users_me(current_user: User = Depends(get_current_active_user)):
+    """获取当前用户信息"""
+    return current_user
 
 # ============================================================================
 # TASK MANAGEMENT ENDPOINTS
@@ -26,7 +57,8 @@ async def upload_files(
     organize_date: str = Form(...),
     project_name: str = Form(...),
     files: List[UploadFile] = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
     """Upload files for a new task"""
     try:
@@ -125,7 +157,7 @@ async def upload_files(
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 @router.get("/tasks/{task_id}", response_model=TaskResponse)
-async def get_task(task_id: int, db: Session = Depends(get_db)):
+async def get_task(task_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Get task details by ID"""
     try:
         task = db.query(Task).filter(Task.id == task_id).first()
@@ -149,7 +181,7 @@ async def get_task(task_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/tasks/{task_id}/files", response_model=List[FileMetadataResponse])
-async def get_task_files(task_id: int, db: Session = Depends(get_db)):
+async def get_task_files(task_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Get all files for a specific task"""
     try:
         files = db.query(FileMetadata).filter(FileMetadata.task_id == task_id).all()
@@ -187,7 +219,8 @@ async def classify_single_file(
     presigned_url: Optional[str] = Form(None),
     file_type: str = Form(...),
     file_id: Optional[str] = Form(None),
-    callback_url: Optional[str] = Form(None)
+    callback_url: Optional[str] = Form(None),
+    current_user: User = Depends(get_current_active_user)
 ):
     """Classify a single file immediately - supports both direct upload and presigned URL"""
     try:
@@ -237,7 +270,8 @@ async def extract_fields_single_file(
     presigned_url: Optional[str] = Form(None),
     file_type: str = Form(...),
     file_id: Optional[str] = Form(None),
-    callback_url: Optional[str] = Form(None)
+    callback_url: Optional[str] = Form(None),
+    current_user: User = Depends(get_current_active_user)
 ):
     """Extract fields from a single file immediately - supports both direct upload and presigned URL"""
     try:
@@ -284,7 +318,8 @@ async def extract_fields_single_file(
 @router.post("/files/view-content", response_model=FileContentResponse)
 async def get_file_content(
     request: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
     """Get file content and extraction results by task ID and relative path"""
     task_id = request.get("task_id")
@@ -416,7 +451,8 @@ async def get_file_content(
 @router.post("/{task_id}/file-classification", response_model=Dict[str, Any])
 async def create_file_classification_task(
     task_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
     """创建文件分类任务 - 异步处理AI文件分类和逻辑重命名"""
     try:
@@ -430,7 +466,8 @@ async def create_file_classification_task(
 async def get_file_classification_progress(
     task_id: int,
     include_details: bool = False,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
     """获取文件分类任务的进度（分类+重命名）"""
     try:
@@ -488,7 +525,7 @@ async def get_file_classification_progress(
 
 
 @router.post("/{task_id}/field-extraction")
-async def trigger_field_extraction(task_id: int, db: Session = Depends(get_db)):
+async def trigger_field_extraction(task_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """Trigger field extraction for all files in a task"""
     try:
         # Validate task exists
@@ -519,7 +556,8 @@ async def trigger_field_extraction(task_id: int, db: Session = Depends(get_db)):
 async def get_extraction_progress(
     task_id: int, 
     include_details: bool = False,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
     """Get field extraction progress for a task"""
     try:
@@ -698,7 +736,7 @@ async def clear_callback_results():
 # ============================================================================
 
 @router.get("/config/instructions")
-async def get_instructions_config():
+async def get_instructions_config(current_user: User = Depends(get_current_active_user)):
     """获取当前指令配置（包含内存中的指令）"""
     from app.config import instructions_manager
     try:
@@ -716,7 +754,7 @@ async def get_instructions_config():
         raise HTTPException(status_code=500, detail=f"Failed to get config: {str(e)}")
 
 @router.post("/config/instructions/hot-swap")
-async def hot_swap_instructions(instructions_data: dict):
+async def hot_swap_instructions(instructions_data: dict, current_user: User = Depends(get_current_active_user)):
     """热交换指令（更新内存中的指令）"""
     from app.config import instructions_manager
     try:
@@ -751,7 +789,7 @@ async def hot_swap_instructions(instructions_data: dict):
         raise HTTPException(status_code=500, detail=f"Failed to hot-swap instructions: {str(e)}")
 
 @router.post("/config/instructions/reset")
-async def reset_instructions_to_original():
+async def reset_instructions_to_original(current_user: User = Depends(get_current_active_user)):
     """重置指令为原始配置"""
     from app.config import instructions_manager
     try:
@@ -771,7 +809,7 @@ async def reset_instructions_to_original():
         raise HTTPException(status_code=500, detail=f"Failed to reset instructions: {str(e)}")
 
 @router.get("/config/instructions/category/{category}")
-async def get_instruction_for_category(category: str):
+async def get_instruction_for_category(category: str, current_user: User = Depends(get_current_active_user)):
     """获取指定分类的指令"""
     from app.config import instructions_manager
     try:

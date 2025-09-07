@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { API_ENDPOINTS, getBackendInfo } from '../config/api'
+import { authenticatedFetch, authenticatedPostForm } from '../utils/api'
 import './SingleFileE2ETest.css'
 
 function SingleFileE2ETest() {
@@ -93,7 +94,7 @@ function SingleFileE2ETest() {
 
   const checkCallbackResult = async (fileId) => {
     try {
-      const response = await fetch(API_ENDPOINTS.CALLBACK_RESULTS(fileId))
+      const response = await authenticatedFetch(API_ENDPOINTS.CALLBACK_RESULTS(fileId))
       if (response.ok) {
         const result = await response.json()
         const currentCount = result.results ? result.results.length : 0
@@ -188,10 +189,7 @@ function SingleFileE2ETest() {
       classifyFormData.append('file_id', fileId)
       classifyFormData.append('callback_url', API_ENDPOINTS.CALLBACK_CLASSIFY)
 
-      const classifyResponse = await fetch(API_ENDPOINTS.CLASSIFY, {
-        method: 'POST',
-        body: classifyFormData
-      })
+      const classifyResponse = await authenticatedPostForm(API_ENDPOINTS.CLASSIFY, classifyFormData)
 
       if (!classifyResponse.ok) {
         throw new Error(`Classification failed: ${classifyResponse.status}`)
@@ -248,10 +246,7 @@ function SingleFileE2ETest() {
       extractFormData.append('file_id', fileId)
       extractFormData.append('callback_url', API_ENDPOINTS.CALLBACK_EXTRACT)
 
-      const extractResponse = await fetch(API_ENDPOINTS.EXTRACT_FIELDS, {
-        method: 'POST',
-        body: extractFormData
-      })
+      const extractResponse = await authenticatedPostForm(API_ENDPOINTS.EXTRACT_FIELDS, extractFormData)
 
       if (!extractResponse.ok) {
         throw new Error(`Extraction failed: ${extractResponse.status}`)

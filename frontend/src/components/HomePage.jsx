@@ -1,12 +1,29 @@
+import React from 'react'
+import { useAuth } from '../contexts/AuthContext'
 import './HomePage.css'
 
 function HomePage() {
+  const { user, logout } = useAuth()
+
+  const handleLogout = () => {
+    logout()
+  }
   return (
     <div className="home-page">
       <div className="home-container">
         <header className="home-header">
-          <h1>Hello Siling 文档处理系统</h1>
-          <p>智能文档分类与字段提取平台</p>
+          <div className="header-content">
+            <div>
+              <h1>Hello Siling 文档处理系统</h1>
+              <p>智能文档分类与字段提取平台</p>
+            </div>
+            <div className="user-info">
+              <span>欢迎, {user?.username || 'admin'}</span>
+              <button onClick={handleLogout} className="logout-button">
+                退出登录
+              </button>
+            </div>
+          </div>
         </header>
 
         <div className="features-grid">
