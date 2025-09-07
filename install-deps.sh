@@ -1,14 +1,17 @@
 #!/bin/bash
-# install-deps.sh - 安装本地依赖服务
+
+# install-deps.sh - 安装所有必要的依赖
 # 使用方法: ./install-deps.sh
 
-echo "📦 开始安装本地依赖服务..."
+set -e
 
-# 颜色输出
+# 颜色定义
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # 日志函数
@@ -28,116 +31,107 @@ log_step() {
     echo -e "${BLUE}[STEP]${NC} $1"
 }
 
-# 检查brew
-check_brew() {
+log_success() {
+    echo -e "${PURPLE}[SUCCESS]${NC} $1"
+}
+
+# 检查并安装Homebrew
+install_homebrew() {
     if ! command -v brew &> /dev/null; then
-        log_error "brew未安装，请先安装Homebrew"
-        log_info "安装Homebrew: /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
-        exit 1
+        log_warn "Homebrew is not installed, installing..."
+        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        if [ $? -eq 0 ]; then
+            log_success "Homebrew installed successfully"
+            # Add Homebrew to PATH for current session
+            eval "$(/opt/homebrew/bin/brew shellenv)"
+        else
+            log_error "Failed to install Homebrew"
+            exit 1
+        fi
+    else
+        log_info "Homebrew is already installed"
     fi
-    log_info "Homebrew已安装: $(brew --version)"
 }
 
-# 安装PostgreSQL
-install_postgresql() {
-    log_step "安装PostgreSQL..."
+# 检查并安装依赖
+install_dependency() {
+    local cmd=$1
+    local install_cmd=$2
+    local package_name=$3
     
-    if command -v psql &> /dev/null; then
-        log_info "PostgreSQL已安装: $(psql --version)"
-        return
+    if ! command -v "$cmd" &> /dev/null; then
+        log_warn "$cmd is not installed, installing $package_name..."
+        if eval "$install_cmd"; then
+            log_success "$package_name installed successfully"
+        else
+            log_error "Failed to install $package_name"
+            exit 1
+        fi
+    else
+        log_info "$cmd is already installed"
     fi
-    
-    log_info "使用brew安装PostgreSQL..."
-    brew install postgresql
-    
-    log_info "PostgreSQL安装完成"
-    log_info "启动服务: brew services start postgresql"
-}
-
-# 安装MinIO
-install_minio() {
-    log_step "安装MinIO..."
-    
-    if command -v minio &> /dev/null; then
-        log_info "MinIO已安装: $(minio --version)"
-        return
-    fi
-    
-    log_info "使用brew安装MinIO..."
-    brew install minio/stable/minio
-    
-    log_info "MinIO安装完成"
-    log_info "启动服务: minio server ~/minio/data --address \":9000\" --console-address \":9001\""
-}
-
-# 安装MinIO客户端
-install_minio_client() {
-    log_step "安装MinIO客户端..."
-    
-    if command -v mc &> /dev/null; then
-        log_info "MinIO客户端已安装: $(mc --version)"
-        return
-    fi
-    
-    log_info "使用brew安装MinIO客户端..."
-    brew install minio/stable/mc
-    
-    log_info "MinIO客户端安装完成"
-}
-
-# 安装Redpanda
-install_redpanda() {
-    log_step "安装Redpanda..."
-    
-    if command -v rpk &> /dev/null; then
-        log_info "Redpanda已安装: $(rpk version)"
-        return
-    fi
-    
-    log_info "使用brew安装Redpanda..."
-    brew install redpanda-data/tap/redpanda
-    
-    log_info "Redpanda安装完成"
-    log_info "启动服务: rpk redpanda start --smp 1 --memory 1G"
-}
-
-# 创建数据目录
-create_directories() {
-    log_step "创建数据目录..."
-    
-    mkdir -p ~/minio/data
-    mkdir -p ~/redpanda/data
-    
-    log_info "数据目录创建完成:"
-    log_info "  - MinIO: ~/minio/data"
-    log_info "  - Redpanda: ~/redpanda/data"
-}
-
-# 显示安装结果
-show_installation() {
-    echo ""
-    echo "📊 安装结果:"
-    echo "PostgreSQL: $(command -v psql > /dev/null && echo '✓ 已安装' || echo '✗ 未安装')"
-    echo "MinIO: $(command -v minio > /dev/null && echo '✓ 已安装' || echo '✗ 未安装')"
-    echo "MinIO客户端: $(command -v mc > /dev/null && echo '✓ 已安装' || echo '✗ 未安装')"
-    echo "Redpanda: $(command -v rpk > /dev/null && echo '✓ 已安装' || echo '✗ 未安装')"
 }
 
 # 主函数
 main() {
-    log_info "开始安装本地依赖服务..."
-    echo "=================================="
+    echo "=========================================="
+    log_info "🔧 Installing Dependencies for Legal Docs MVP"
+    echo "=========================================="
     
-    check_brew
-    install_postgresql
-    install_minio
-    install_minio_client
-    install_redpanda
-    create_directories
-    show_installation
+    # 安装Homebrew
+    log_step "1. Installing Homebrew..."
+    install_homebrew
     
-    echo ""
-    log_info "安装完成！现在可以运行: ./startup.sh"
+    # 安装系统依赖
+    log_step "2. Installing system dependencies..."
+    install_dependency "python3" "brew install python@3.12" "Python 3.12"
+    install_dependency "psql" "brew install postgresql@14" "PostgreSQL"
+    install_dependency "kafka-server-start" "brew install kafka" "Apache Kafka"
+    install_dependency "curl" "brew install curl" "curl"
+    install_dependency "uv" "brew install uv" "uv (Python package manager)"
+    
+    # 启动PostgreSQL服务
+    log_step "3. Starting PostgreSQL service..."
+    if ! brew services list | grep postgresql@14 | grep started > /dev/null; then
+        log_info "Starting PostgreSQL service..."
+        brew services start postgresql@14
+        sleep 5
+    else
+        log_info "PostgreSQL service is already running"
+    fi
+    
+    # 创建数据库
+    log_step "4. Creating database..."
+    createdb legal_docs_dev 2>/dev/null || log_info "Database legal_docs_dev already exists"
+    
+    # 安装Python依赖
+    log_step "5. Installing Python dependencies..."
+    cd backend
+    
+    # 确保使用Python 3.12创建虚拟环境
+    log_info "Creating fresh virtual environment with Python 3.12..."
+    rm -rf .venv
+    uv venv --python /opt/homebrew/bin/python3.12
+    
+    # 激活虚拟环境并安装依赖
+    source .venv/bin/activate
+    log_info "Installing Python packages..."
+    # 使用uv直接安装
+    uv pip install -e .
+    
+    echo "=========================================="
+    log_success "🎉 All dependencies installed successfully!"
+    echo "=========================================="
+    
+    log_info "📋 Next steps:"
+    log_info "  1. Start the application: cd backend && ./startup.sh --dev"
+    log_info "  2. Or start in production mode: cd backend && ./startup.sh"
+    log_info ""
+    log_info "📝 Available services:"
+    log_info "  • PostgreSQL: localhost:5432"
+    log_info "  • Kafka: localhost:9092 (will start with application)"
+    log_info "  • MinIO: localhost:9000 (will start with application)"
+    log_info "  • FastAPI: localhost:8000 (will start with application)"
 }
 
 # 运行主函数

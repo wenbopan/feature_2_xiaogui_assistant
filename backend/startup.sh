@@ -39,23 +39,136 @@ log_check() {
     echo -e "${CYAN}[CHECK]${NC} $1"
 }
 
-# 错误处理函数
+# 清理函数 - 停止所有服务
 cleanup() {
-    log_error "Startup failed, cleaning up..."
-    # 可以在这里添加清理逻辑
-    exit 1
+    echo ""
+    log_info "🛑 收到中断信号，正在清理服务..."
+    
+    # 停止FastAPI应用
+    if [ -f ".env.pid" ]; then
+        source .env.pid
+        if [ -n "$APP_PID" ] && kill -0 "$APP_PID" 2>/dev/null; then
+            log_info "停止FastAPI应用 (PID: $APP_PID)..."
+            kill -TERM "$APP_PID" 2>/dev/null || true
+            sleep 2
+        fi
+        rm -f .env.pid
+    fi
+    
+    # 停止MinIO
+    if [ -n "$MINIO_PID" ] && kill -0 "$MINIO_PID" 2>/dev/null; then
+        log_info "停止MinIO (PID: $MINIO_PID)..."
+        kill -TERM "$MINIO_PID" 2>/dev/null || true
+    fi
+    
+    # 停止Kafka进程
+    if [ -n "$KAFKA_PID" ] && kill -0 "$KAFKA_PID" 2>/dev/null; then
+        log_info "停止Kafka (PID: $KAFKA_PID)..."
+        kill -TERM "$KAFKA_PID" 2>/dev/null || true
+    fi
+    
+    # 停止Zookeeper进程
+    if [ -n "$ZOOKEEPER_PID" ] && kill -0 "$ZOOKEEPER_PID" 2>/dev/null; then
+        log_info "停止Zookeeper (PID: $ZOOKEEPER_PID)..."
+        kill -TERM "$ZOOKEEPER_PID" 2>/dev/null || true
+    fi
+    
+    # 停止任何残留的Kafka进程
+    log_info "停止任何残留的Kafka进程..."
+    pkill -f "kafka" 2>/dev/null || true
+    pkill -f "zookeeper" 2>/dev/null || true
+    
+    # 停止Docker Compose服务（如果在deploy目录运行）
+    if [ -f "../deploy/docker-compose.aliyun.yml" ]; then
+        log_info "停止Docker Compose服务..."
+        cd ../deploy
+        docker-compose -f docker-compose.aliyun.yml down 2>/dev/null || true
+        cd ../backend
+    fi
+    
+    log_success "✅ 清理完成！"
+    exit 0
 }
 
-trap cleanup ERR
+# 设置信号处理
+trap cleanup SIGINT SIGTERM
 
 # 检查依赖函数
 check_command() {
     local cmd=$1
     if ! command -v "$cmd" &> /dev/null; then
-        log_error "$cmd is not installed"
+        log_error "$cmd is not installed. Please run ./install-deps.sh first"
         exit 1
     fi
     log_info "$cmd is available"
+}
+
+# 设置环境配置
+setup_environment() {
+    if [ ! -f ".env" ]; then
+        log_warn ".env file not found. Creating environment configuration..."
+        echo ""
+        log_info "🔑 Please provide your Gemini API key:"
+        echo -n "Enter your Gemini API key: "
+        read -r GEMINI_API_KEY
+        
+        if [ -z "$GEMINI_API_KEY" ]; then
+            log_error "Gemini API key is required. Please run the startup script again and provide a valid API key."
+            exit 1
+        fi
+        
+        # 获取当前用户名
+        CURRENT_USER=$(whoami)
+        
+        # 创建.env文件
+        cat > .env << EOF
+# Environment Configuration
+GEMINI_API_KEY=$GEMINI_API_KEY
+
+# Database Configuration
+DATABASE_URL=postgresql://$CURRENT_USER@localhost:5432/legal_docs_dev
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_USER=$CURRENT_USER
+POSTGRES_PASSWORD=password
+POSTGRES_DB=legal_docs_dev
+
+# MinIO Configuration
+MINIO_ENDPOINT=localhost:9000
+MINIO_ACCESS_KEY=admin
+MINIO_SECRET_KEY=password123
+MINIO_BUCKET=legal-docs
+MINIO_SECURE=false
+
+# Kafka Configuration
+KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+
+# Application Configuration
+APP_NAME=feature_2_service
+LOG_LEVEL=INFO
+EOF
+        log_success ".env file created successfully"
+    else
+        # 检查.env文件是否包含必要的配置
+        if ! grep -q "GEMINI_API_KEY" .env; then
+            log_warn "GEMINI_API_KEY not found in .env file"
+            echo ""
+            log_info "🔑 Please provide your Gemini API key:"
+            echo -n "Enter your Gemini API key: "
+            read -r GEMINI_API_KEY
+            
+            if [ -z "$GEMINI_API_KEY" ]; then
+                log_error "Gemini API key is required. Please run the startup script again and provide a valid API key."
+                exit 1
+            fi
+            
+            # 添加GEMINI_API_KEY到.env文件
+            echo "GEMINI_API_KEY=$GEMINI_API_KEY" >> .env
+            log_success "GEMINI_API_KEY added to .env file"
+        else
+            log_info "Environment configuration found"
+        fi
+    fi
 }
 
 # 等待服务就绪函数
@@ -99,7 +212,7 @@ check_port() {
 
 # 服务配置
 SERVICE_NAME="feature_2_service"
-SERVICE_PORT=8000
+SERVICE_PORT=8001
 
 # 主函数
 main() {
@@ -111,7 +224,7 @@ main() {
     log_step "1. Checking system dependencies..."
     check_command "python3"
     check_command "psql"
-    check_command "rpk"
+    check_command "kafka-server-start"
     check_command "curl"
     
     # 检查虚拟环境
@@ -121,11 +234,8 @@ main() {
         exit 1
     fi
     
-    # 检查uv是否安装
-    if ! command -v uv &> /dev/null; then
-        log_error "uv is not installed. Please install it first: brew install uv"
-        exit 1
-    fi
+    # 检查uv
+    check_command "uv"
     
     # 检查.venv目录是否存在，如果不存在则创建
     if [ ! -d ".venv" ]; then
@@ -145,8 +255,12 @@ main() {
     fi
     log_info "Python dependencies satisfied"
     
+    # 检查并创建.env文件
+    log_step "4. Checking environment configuration..."
+    setup_environment
+    
     # 启动PostgreSQL
-    log_step "4. Starting PostgreSQL..."
+    log_step "5. Starting PostgreSQL..."
     if check_port 5432 "PostgreSQL"; then
         log_info "PostgreSQL is already running"
     else
@@ -169,7 +283,7 @@ main() {
     createdb legal_docs_dev 2>/dev/null || log_info "Database legal_docs_dev already exists"
     
     # 启动MinIO
-    log_step "5. Starting MinIO..."
+    log_step "6. Starting MinIO..."
     if check_port 9000 "MinIO"; then
         log_info "MinIO is already running"
     else
@@ -196,120 +310,104 @@ main() {
     # 等待MinIO就绪
     wait_for_service "MinIO" "curl -s http://localhost:9000/minio/health/live" 10
     
-    # 启动Redpanda (Docker容器)
-    log_step "6. Starting Redpanda (Kafka)..."
-    if check_port 9092 "Redpanda"; then
-        log_info "Redpanda is already running"
+    # 启动Kafka (本地服务)
+    log_step "7. Starting Apache Kafka..."
+    if check_port 9092 "Kafka"; then
+        log_info "Kafka is already running"
     else
-        log_info "Starting Redpanda cluster via Docker..."
-        mkdir -p ~/redpanda-data
+        log_info "Starting Kafka locally..."
         
-        # 启动Redpanda Docker容器
-        nohup rpk container start > ~/redpanda-data/redpanda.log 2>&1 &
-        REDPANDA_PID=$!
+        # Kafka should already be installed from dependency check
         
-        log_info "Redpanda container started with PID: $REDPANDA_PID"
+        # 创建Kafka数据目录
+        mkdir -p ~/kafka-data/zookeeper
+        mkdir -p ~/kafka-data/kafka-logs
+        
+        # 启动Zookeeper
+        log_info "Starting Zookeeper..."
+        nohup zookeeper-server-start /opt/homebrew/etc/kafka/zookeeper.properties > ~/kafka-data/zookeeper.log 2>&1 &
+        ZOOKEEPER_PID=$!
+        
+        sleep 5
+        
+        # 启动Kafka
+        log_info "Starting Kafka server..."
+        nohup kafka-server-start /opt/homebrew/etc/kafka/server.properties > ~/kafka-data/kafka.log 2>&1 &
+        KAFKA_PID=$!
+        
+        log_info "Kafka started with PIDs: Zookeeper=$ZOOKEEPER_PID, Kafka=$KAFKA_PID"
         sleep 10
         
-        # 检查Redpanda容器是否在运行
-        if ! docker ps --filter "name=redpanda-1" --format "{{.Status}}" | grep -q "Up"; then
-            log_error "Redpanda container failed to start. Check ~/redpanda-data/redpanda.log for details:"
-            tail -10 ~/redpanda-data/redpanda.log
+        # 检查Kafka进程是否仍在运行
+        if ! kill -0 $KAFKA_PID 2>/dev/null; then
+            log_error "Kafka failed to start. Check ~/kafka-data/kafka.log for details:"
+            tail -10 ~/kafka-data/kafka.log
             exit 1
         fi
         
-        log_info "Redpanda container is running"
+        log_info "Kafka process is running (PID: $KAFKA_PID)"
     fi
     
-    # 等待Redpanda就绪
-    wait_for_service "Redpanda" "rpk cluster health" 20
+    # 等待Kafka就绪
+    wait_for_service "Kafka" "kafka-topics --bootstrap-server localhost:9092 --list" 20
     
     # 启动FastAPI应用
-    log_step "7. Starting FastAPI application..."
+    log_step "8. Starting FastAPI application..."
+    
+    # 保存进程ID到.env.pid文件（用于清理）
+    echo "export SERVICE_PID=$$" > .env.pid
+    echo "export SERVICE_NAME=feature_2_service" >> .env.pid
+    echo "export MINIO_PID=$MINIO_PID" >> .env.pid
+    echo "export KAFKA_PID=$KAFKA_PID" >> .env.pid
+    echo "export ZOOKEEPER_PID=$ZOOKEEPER_PID" >> .env.pid
+    echo "export APP_PID=$$" >> .env.pid
     
     # 检查是否在开发模式
     if [ "$1" = "--dev" ]; then
         log_info "Starting application in DEVELOPMENT mode with uvicorn..."
-        log_info "This will start uvicorn in the background with auto-reload enabled"
+        log_info "Server will run in foreground and show live logs"
+        log_info "Press Ctrl+C to stop all services"
         echo ""
         
-        # 在开发模式下，后台启动uvicorn并启用reload
-        # 启动uvicorn服务
-        nohup uvicorn app.main:app --host 0.0.0.0 --port $SERVICE_PORT --reload --log-level info --app-dir . > logs/app.log 2>&1 &
-        APP_PID=$!
+        # 在开发模式下，前台启动uvicorn并启用reload
+        log_success "🚀 All services started! Starting FastAPI in development mode..."
+        echo ""
+        log_info "📋 Service URLs:"
+        log_info "   • FastAPI Application: http://localhost:8001"
+        log_info "   • API Documentation:   http://localhost:8001/docs"
+        log_info "   • Health Check:        http://localhost:8001/health"
+        log_info "   • MinIO Console:       http://localhost:9001"
+        log_info "   • PostgreSQL:          localhost:5432"
+        log_info "   • Kafka:               localhost:9092"
+        echo ""
+        log_info "💡 Press Ctrl+C to stop all services"
+        echo "=========================================="
         
-        # 保存进程ID到.env.pid文件
-        echo "export SERVICE_PID=$APP_PID" > .env.pid
-        echo "export SERVICE_NAME=feature_2_service" >> .env.pid
-        echo "export MINIO_PID=$MINIO_PID" >> .env.pid
-        echo "export APP_PID=$APP_PID" >> .env.pid
-        
-        log_info "Development server started with PID: $APP_PID"
-        log_info "Service name: $SERVICE_NAME"
-        log_info "PID saved to .env.pid file"
-        log_info "Logs are being written to logs/app.log"
-        log_info "Server will automatically reload when you modify code"
+        # 前台启动uvicorn，这样trap可以正常工作
+        # 使用reload但排除.venv目录以避免频繁重启
+        uvicorn app.main:app --host 0.0.0.0 --port $SERVICE_PORT --reload --reload-exclude ".venv/*" --reload-exclude "logs/*" --log-level info --app-dir .
     else
-        log_info "Starting application in PRODUCTION mode with uvicorn (background)..."
-        # 启动uvicorn服务
-        nohup uvicorn app.main:app --host 0.0.0.0 --port $SERVICE_PORT --log-level info --app-dir . > logs/app.log 2>&1 &
-        APP_PID=$!
+        log_info "Starting application in PRODUCTION mode with uvicorn..."
+        log_info "Server will run in foreground and show live logs"
+        log_info "Press Ctrl+C to stop all services"
+        echo ""
         
-        # 保存进程ID到.env.pid文件
-        echo "export SERVICE_PID=$APP_PID" > .env.pid
-        echo "export SERVICE_NAME=feature_2_service" >> .env.pid
-        echo "export MINIO_PID=$MINIO_PID" >> .env.pid
-        echo "export APP_PID=$APP_PID" >> .env.pid
+        log_success "🚀 All services started! Starting FastAPI in production mode..."
+        echo ""
+        log_info "📋 Service URLs:"
+        log_info "   • FastAPI Application: http://localhost:8001"
+        log_info "   • API Documentation:   http://localhost:8001/docs"
+        log_info "   • Health Check:        http://localhost:8001/health"
+        log_info "   • MinIO Console:       http://localhost:9001"
+        log_info "   • PostgreSQL:          localhost:5432"
+        log_info "   • Kafka:               localhost:9092"
+        echo ""
+        log_info "💡 Press Ctrl+C to stop all services"
+        echo "=========================================="
+        
+        # 前台启动uvicorn
+        uvicorn app.main:app --host 0.0.0.0 --port $SERVICE_PORT --log-level info --app-dir .
     fi
-    
-    # 等待应用启动
-    log_check "Waiting for application to start..."
-    sleep 5
-    
-    # 检查应用是否仍在运行
-    if ! kill -0 $APP_PID 2>/dev/null; then
-        log_error "Application failed to start. Check logs/app.log for details:"
-        tail -20 logs/app.log
-        exit 1
-    fi
-    
-    # 简单的进程状态检查
-    log_step "8. Application status check..."
-    echo ""
-    log_info "📊 Application status:"
-    log_success "✅ Application process is running (PID: $APP_PID)"
-    log_info "📝 Check logs/app.log for detailed application status"
-    echo ""
-    
-    # 保存进程ID到文件
-    log_info "Saving process IDs..."
-    # 所有PID信息已经保存在.env.pid文件中，不需要创建分散的PID文件
-    
-    # 启动成功
-    echo "=========================================="
-    log_success "🎉 ALL SERVICES STARTED SUCCESSFULLY!"
-    echo "=========================================="
-    
-    log_info "📋 Service URLs:"
-    log_info "  • FastAPI Application: http://localhost:8000"
-    log_info "  • API Documentation:   http://localhost:8000/docs"
-    log_info "  • Health Check:        http://localhost:8000/health"
-    log_info "  • Readiness Check:     http://localhost:8000/ready"
-    log_info "  • MinIO Console:       http://localhost:9001"
-    log_info "  • PostgreSQL:          localhost:5432"
-    log_info "  • Redpanda:            localhost:9092"
-    
-    echo ""
-    log_info "📝 Useful commands:"
-    log_info "  • View app logs:       tail -f logs/app.log"
-    log_info "  • Test upload:         curl -X POST http://localhost:8000/api/v1/tasks/upload"
-    log_info "  • Stop services:       ./stop-local.sh"
-    
-    echo ""
-    log_success "🚀 System is ready for testing!"
-    
-    log_info "💡 Application PID: $APP_PID (saved to .env.pid)"
-    log_info "💡 Use 'kill $APP_PID' to stop the application"
 }
 
 # 运行主函数

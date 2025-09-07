@@ -105,3 +105,4 @@ frontend/.env.production.local
 postgres-*.tar
 minio-*.tar
 redpanda-*.tar
+docker-images/
