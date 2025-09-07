@@ -18,7 +18,7 @@ RUN npm ci
 COPY . .
 
 # Accept build arguments for environment variables
-ARG VITE_BACKEND_HOST=localhost
+ARG VITE_BACKEND_HOST=47.98.154.221
 ARG VITE_BACKEND_PORT=8001
 ARG VITE_BACKEND_PROTOCOL=http
 
@@ -34,7 +34,7 @@ RUN npm run build
 FROM node:20-alpine
 
 # Install curl for health checks
-RUN apk add --no-cache curl
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apk/repositories && apk add --no-cache curl
 
 # Set working directory
 WORKDIR /app

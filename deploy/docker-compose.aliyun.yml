@@ -83,9 +83,7 @@ services:
 
   # 后端服务
   backend:
-    build:
-      context: ../backend
-      dockerfile: Dockerfile
+    image: hello-siling-backend:latest
     container_name: hello-siling-backend
     ports:
       - "8001:8001"
@@ -122,13 +120,7 @@ services:
 
   # 前端服务
   frontend:
-    build:
-      context: ../frontend
-      dockerfile: Dockerfile
-      args:
-        - VITE_BACKEND_HOST=${VITE_BACKEND_HOST}
-        - VITE_BACKEND_PORT=${VITE_BACKEND_PORT}
-        - VITE_BACKEND_PROTOCOL=${VITE_BACKEND_PROTOCOL}
+    image: hello-siling-frontend:latest
     container_name: hello-siling-frontend
     ports:
       - "3000:3000"

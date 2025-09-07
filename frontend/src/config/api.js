@@ -1,15 +1,15 @@
 // API Configuration
 const API_CONFIG = {
   // Default backend port for local development
-  BACKEND_PORT: import.meta.env.VITE_BACKEND_PORT || '8000',
+  BACKEND_PORT: import.meta.env.VITE_BACKEND_PORT || '8001',
   // Backend host
-  BACKEND_HOST: import.meta.env.VITE_BACKEND_HOST || 'localhost',
+  BACKEND_HOST: import.meta.env.VITE_BACKEND_HOST || '47.98.154.221',
   // Protocol
   PROTOCOL: import.meta.env.VITE_BACKEND_PROTOCOL || 'http',
 }
 
 // Build the base URL
-const BASE_URL = `${API_CONFIG.PROTOCOL}://${API_CONFIG.BACKEND_HOST}:${API_CONFIG.BACKEND_PORT}`
+const BASE_URL = `http://47.98.154.221:8001`
 
 // API endpoints
 export const API_ENDPOINTS = {

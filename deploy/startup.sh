@@ -98,14 +98,6 @@ fi
 # 启动服务
 log_info "启动 Hello Siling 服务..."
 
-# 加载预保存的Docker镜像
-log_info "加载预保存的Docker镜像..."
-docker load -i postgres-15-alpine.tar &
-docker load -i minio-latest.tar &
-docker load -i redpanda-latest.tar &
-docker load -i hello-siling-backend.tar &
-docker load -i hello-siling-frontend.tar &
-wait
 
 # 启动所有服务（后台运行）
 log_info "启动服务..."
