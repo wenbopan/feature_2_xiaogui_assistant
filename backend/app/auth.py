@@ -14,6 +14,20 @@ SECRET_KEY = "your-secret-key-change-in-production"  # 在生产环境中应该�
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+security = HTTPBearer()
+
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
+# 用于生成密码哈希的工具函数（开发时使用）
+def generate_password_hash(password: str):
+    """生成密码哈希值，用于开发时设置用户密码"""
+    return get_password_hash(password)
+
 # 写死的用户账号密码
 USERS_DB = {
     "admin": {
@@ -22,9 +36,6 @@ USERS_DB = {
         "disabled": False,
     }
 }
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-security = HTTPBearer()
 
 class Token(BaseModel):
     access_token: str
@@ -39,12 +50,6 @@ class User(BaseModel):
 
 class UserInDB(User):
     hashed_password: str
-
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
-
-def get_password_hash(password):
-    return pwd_context.hash(password)
 
 def get_user(username: str):
     if username in USERS_DB:
@@ -94,12 +99,8 @@ async def get_current_active_user(current_user: User = Depends(get_current_user)
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
 
-# 用于生成密码哈希的工具函数（开发时使用）
-def generate_password_hash(password: str):
-    """生成密码哈希值，用于开发时设置用户密码"""
-    return get_password_hash(password)
-
 # 如果需要添加新用户，可以使用这个函数
 if __name__ == "__main__":
-    # 生成 "secret" 的哈希值
-    print("Password hash for 'secret':", generate_password_hash("secret"))
+    # 生成密码的哈希值
+    print("Password hash for 'feature2@siling123':", generate_password_hash("feature2@siling123"))
+

@@ -52,11 +52,6 @@ docker build --platform linux/amd64 -t hello-siling-backend:latest "$PROJECT_ROO
 log_info "Building frontend image..."
 docker build --platform linux/amd64 -t hello-siling-frontend:latest "$PROJECT_ROOT/frontend"
 
-log_success "Build and transfer completed successfully!"
-log_info ""
-log_info "Next steps on your server:"
-log_info "1. SSH into your server: ssh $SERVER_USER@$SERVER_IP"
-log_info "2. Go to deploy directory: cd $SERVER_PATH"
-log_info "3. Run startup script: ./startup.sh"
-log_info ""
-log_info "The startup script will load the pre-built images and start all services!"
+docker rm -f hello-siling-backend hello-siling-frontend
+
+./startup.sh
