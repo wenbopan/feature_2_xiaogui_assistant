@@ -7,10 +7,11 @@
 
 import logging
 import os
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any
 from datetime import datetime
 
-from app.services.gemini_service import gemini_service
+from app.services.llm_service import llm_service
+from app.services.kafka_service import kafka_service
 
 
 logger = logging.getLogger(__name__)
@@ -21,7 +22,7 @@ class FileClassificationProcessor:
     def __init__(self):
         self.supported_extensions = {'.pdf', '.jpg', '.jpeg', '.png'}
     
-    def classify_file_content(self, file_content: bytes, file_type: str, original_filename: str) -> Dict[str, Any]:
+    def classify_file_content(self, file_content: bytes, file_type: str, original_filename: str, model_type: str = None) -> Dict[str, Any]:
         """
         核心文件分类方法 - 不依赖数据库，只处理文件内容分类
         
@@ -29,17 +30,23 @@ class FileClassificationProcessor:
             file_content: 文件二进制内容
             file_type: 文件类型/扩展名
             original_filename: 原始文件名
+            model_type: AI模型类型（可选，默认为qwen）
             
         Returns:
             分类结果字典
         """
         try:
-            # 所有文件类型都直接使用Gemini视觉模型进行分类
-            # 传递原始二进制内容，让Gemini理解整个文件
-            classification_result = gemini_service.classify_file_sync(
+            # 记录使用的模型
+            actual_model = model_type or "qwen"
+            logger.info(f"🔍 File classification processor using {actual_model.upper()} model for: {original_filename}")
+            
+            # 所有文件类型都直接使用LLM服务进行分类
+            # 传递原始二进制内容，让AI模型理解整个文件
+            classification_result = llm_service.classify_file_sync(
                 file_content, 
                 file_type, 
-                original_filename
+                original_filename,
+                model_type
             )
             return classification_result
             
@@ -77,7 +84,7 @@ class FileClassificationProcessor:
         return logical_filename
     
     def process_file_content(self, file_content: bytes, file_type: str, original_filename: str, 
-                           organize_date: str = None, project_name: str = None) -> Dict[str, Any]:
+                           organize_date: str = None, project_name: str = None, model_type: str = None) -> Dict[str, Any]:
         """
         处理文件内容并返回分类结果和逻辑文件名
         
@@ -87,13 +94,14 @@ class FileClassificationProcessor:
             original_filename: 原始文件名
             organize_date: 整理日期（可选，用于生成逻辑文件名）
             project_name: 项目名称（可选，用于生成逻辑文件名）
+            model_type: AI模型类型（可选，默认为qwen）
             
         Returns:
             处理结果字典，包含分类结果和逻辑文件名
         """
         try:
             # 分类文件
-            classification_result = self.classify_file_content(file_content, file_type, original_filename)
+            classification_result = self.classify_file_content(file_content, file_type, original_filename, model_type)
             
             # 生成逻辑重命名文件名（如果提供了组织信息）
             logical_filename = None

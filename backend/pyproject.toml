@@ -31,11 +31,11 @@ dependencies = [
     "Pillow>=10.1.0",
     "pypdf2>=3.0.1",
     "python-magic>=0.4.27",
-    "google-generativeai>=0.3.0",
-    "requests>=2.31.0",
     "grpcio>=1.60.0",
     "grpcio-tools>=1.60.0",
     "protobuf>=4.25.0",
+    "google-genai>=1.33.0",
+    "openai>=1.106.1",
 ]
 
 [project.optional-dependencies]

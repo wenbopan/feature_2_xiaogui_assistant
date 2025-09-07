@@ -28,7 +28,8 @@ class SimpleFileService:
         file_content: bytes,
         file_type: str,
         file_id: Optional[str] = None,
-        callback_url: Optional[str] = None
+        callback_url: Optional[str] = None,
+        model_type: Optional[str] = None
     ) -> Dict[str, Any]:
         """创建单个文件分类任务 - 上传到MinIO，发送S3 key到Kafka"""
         try:
@@ -71,7 +72,8 @@ class SimpleFileService:
                     "file_type": file_type,
                     "callback_url": callback_url,
                     "created_at": datetime.now().isoformat(),
-                    "delivery_method": "minio"
+                    "delivery_method": "minio",
+                    "model_type": model_type or "qwen"  # 默认使用qwen
                 }
                 
                 # 发送到Kafka
@@ -103,7 +105,9 @@ class SimpleFileService:
         self,
         presigned_url: str,
         file_type: str,
-        callback_url: Optional[str] = None
+        file_id: Optional[str] = None,
+        callback_url: Optional[str] = None,
+        model_type: Optional[str] = None
     ) -> Dict[str, Any]:
         """从预签名URL创建单个文件分类任务"""
         try:
@@ -130,7 +134,8 @@ class SimpleFileService:
                 "file_type": file_type,
                 "callback_url": callback_url,
                 "created_at": datetime.now().isoformat(),
-                "delivery_method": "presigned_url"
+                "delivery_method": "presigned_url",
+                "model_type": model_type or "qwen"  # 默认使用qwen
             }
             
             # 发送到Kafka

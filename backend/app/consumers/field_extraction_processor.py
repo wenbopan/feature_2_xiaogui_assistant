@@ -8,7 +8,7 @@
 import logging
 from typing import Dict, Any
 
-from app.services.gemini_service import gemini_service
+from app.services.llm_service import llm_service
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ class FieldExtractionProcessor:
     def __init__(self):
         self.supported_extensions = {'.pdf', '.jpg', '.jpeg', '.png'}
     
-    def extract_fields_from_content(self, file_content: bytes, file_type: str, filename: str, category: str) -> Dict[str, Any]:
+    def extract_fields_from_content(self, file_content: bytes, file_type: str, filename: str, category: str, model_type: str = None) -> Dict[str, Any]:
         """
         从文件内容中提取字段 - 核心业务逻辑方法
         
@@ -27,12 +27,15 @@ class FieldExtractionProcessor:
             file_type: 文件类型/扩展名
             filename: 文件名
             category: 文档分类（必需）
+            model_type: AI模型类型（可选，默认为qwen）
             
         Returns:
             字段提取结果字典
         """
         try:
-            logger.info(f"Processing field extraction for file {filename}")
+            # 记录使用的模型
+            actual_model = model_type or "qwen"
+            logger.info(f"🔍 Field extraction processor using {actual_model.upper()} model for: {filename} (category: {category})")
             
             # 验证分类参数
             if not category or category.strip() == "":
@@ -43,12 +46,13 @@ class FieldExtractionProcessor:
             if category not in SUPPORTED_CATEGORIES:
                 raise ValueError(f"Unsupported category '{category}'. Supported categories: {SUPPORTED_CATEGORIES}")
             
-            # 调用Gemini服务进行实际的字段提取（同步方式）
-            extraction_result = gemini_service.extract_fields_sync(
+            # 调用LLM服务进行实际的字段提取（同步方式）
+            extraction_result = llm_service.extract_fields_sync(
                 file_content=file_content,
                 file_type=file_type,
                 filename=filename,
-                category=category
+                category=category,
+                model_type=model_type
             )
             
             # 返回提取结果（不涉及数据库操作，由调用方处理）
@@ -58,7 +62,7 @@ class FieldExtractionProcessor:
                 "extracted_fields": extraction_result.get("extraction_data", {}),
                 "field_category": extraction_result.get("category", "未识别"),
                 "confidence": extraction_result.get("extraction_confidence", 0.0),
-                "method": "gemini_vision"
+                "method": f"{model_type or 'qwen'}_vision"
             }
             
         except Exception as e:

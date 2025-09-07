@@ -103,72 +103,48 @@ check_command() {
     log_info "$cmd is available"
 }
 
-# 设置环境配置
-setup_environment() {
-    if [ ! -f ".env" ]; then
-        log_warn ".env file not found. Creating environment configuration..."
-        echo ""
-        log_info "🔑 Please provide your Gemini API key:"
-        echo -n "Enter your Gemini API key: "
-        read -r GEMINI_API_KEY
-        
-        if [ -z "$GEMINI_API_KEY" ]; then
-            log_error "Gemini API key is required. Please run the startup script again and provide a valid API key."
-            exit 1
-        fi
-        
-        # 获取当前用户名
-        CURRENT_USER=$(whoami)
-        
-        # 创建.env文件
-        cat > .env << EOF
-# Environment Configuration
-GEMINI_API_KEY=$GEMINI_API_KEY
-
-# Database Configuration
-DATABASE_URL=postgresql://$CURRENT_USER@localhost:5432/legal_docs_dev
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-POSTGRES_USER=$CURRENT_USER
-POSTGRES_PASSWORD=password
-POSTGRES_DB=legal_docs_dev
-
-# MinIO Configuration
-MINIO_ENDPOINT=localhost:9000
-MINIO_ACCESS_KEY=admin
-MINIO_SECRET_KEY=password123
-MINIO_BUCKET=legal-docs
-MINIO_SECURE=false
-
-# Kafka Configuration
-KAFKA_BOOTSTRAP_SERVERS=localhost:9092
-
-# Application Configuration
-APP_NAME=feature_2_service
-LOG_LEVEL=INFO
-EOF
-        log_success ".env file created successfully"
-    else
-        # 检查.env文件是否包含必要的配置
-        if ! grep -q "GEMINI_API_KEY" .env; then
-            log_warn "GEMINI_API_KEY not found in .env file"
-            echo ""
-            log_info "🔑 Please provide your Gemini API key:"
-            echo -n "Enter your Gemini API key: "
-            read -r GEMINI_API_KEY
-            
-            if [ -z "$GEMINI_API_KEY" ]; then
-                log_error "Gemini API key is required. Please run the startup script again and provide a valid API key."
-                exit 1
-            fi
-            
-            # 添加GEMINI_API_KEY到.env文件
-            echo "GEMINI_API_KEY=$GEMINI_API_KEY" >> .env
-            log_success "GEMINI_API_KEY added to .env file"
-        else
-            log_info "Environment configuration found"
-        fi
+# 检查环境变量配置
+check_environment() {
+    log_info "Checking required environment variables..."
+    
+    # 检查必需的API keys
+    if [ -z "$GEMINI_API_KEY" ]; then
+        log_error "GEMINI_API_KEY environment variable is required"
+        log_info "Please set it using: export GEMINI_API_KEY='your-api-key'"
+        log_info "Or add it to your ~/.zshrc file for persistence"
+        exit 1
     fi
+    
+    if [ -z "$QWEN_API_KEY" ]; then
+        log_error "QWEN_API_KEY environment variable is required"
+        log_info "Please set it using: export QWEN_API_KEY='your-api-key'"
+        log_info "Or add it to your ~/.zshrc file for persistence"
+        exit 1
+    fi
+    
+    # 设置默认的数据库配置（如果未设置）
+    if [ -z "$DATABASE_URL" ]; then
+        CURRENT_USER=$(whoami)
+        export DATABASE_URL="postgresql://$CURRENT_USER@localhost:5432/legal_docs_dev"
+        log_info "Using default DATABASE_URL: $DATABASE_URL"
+    fi
+    
+    # 设置其他默认配置
+    export POSTGRES_HOST=${POSTGRES_HOST:-localhost}
+    export POSTGRES_PORT=${POSTGRES_PORT:-5432}
+    export POSTGRES_USER=${POSTGRES_USER:-$CURRENT_USER}
+    export POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+    export POSTGRES_DB=${POSTGRES_DB:-legal_docs_dev}
+    export MINIO_ENDPOINT=${MINIO_ENDPOINT:-localhost:9000}
+    export MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-admin}
+    export MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-password123}
+    export MINIO_BUCKET=${MINIO_BUCKET:-legal-docs}
+    export MINIO_SECURE=${MINIO_SECURE:-false}
+    export KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}
+    export APP_NAME=${APP_NAME:-feature_2_service}
+    export LOG_LEVEL=${LOG_LEVEL:-INFO}
+    
+    log_success "Environment variables configured successfully"
 }
 
 # 等待服务就绪函数
@@ -220,6 +196,23 @@ main() {
     log_info "🚀 Starting Legal Docs MVP Application"
     echo "=========================================="
     
+    # 显示环境变量设置说明
+    if [ -z "$GEMINI_API_KEY" ] || [ -z "$QWEN_API_KEY" ]; then
+        echo ""
+        log_info "📋 Required Environment Variables:"
+        log_info "   • GEMINI_API_KEY - Your Google Gemini API key"
+        log_info "   • QWEN_API_KEY - Your Qwen API key"
+        echo ""
+        log_info "💡 To set them permanently, add to your ~/.zshrc:"
+        log_info "   export GEMINI_API_KEY='your-gemini-key'"
+        log_info "   export QWEN_API_KEY='your-qwen-key'"
+        echo ""
+        log_info "🔄 Or set them temporarily for this session:"
+        log_info "   export GEMINI_API_KEY='your-gemini-key'"
+        log_info "   export QWEN_API_KEY='your-qwen-key'"
+        echo ""
+    fi
+    
     # 检查必要的命令
     log_step "1. Checking system dependencies..."
     check_command "python3"
@@ -255,9 +248,9 @@ main() {
     fi
     log_info "Python dependencies satisfied"
     
-    # 检查并创建.env文件
+    # 检查环境变量配置
     log_step "4. Checking environment configuration..."
-    setup_environment
+    check_environment
     
     # 启动PostgreSQL
     log_step "5. Starting PostgreSQL..."

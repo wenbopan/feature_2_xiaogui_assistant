@@ -161,6 +161,7 @@ class SimpleFileClassificationConsumer:
             file_type = job_data.file_type
             callback_url = job_data.callback_url
             delivery_method = job_data.delivery_method
+            model_type = job_data.model_type  # 提取模型类型
             
             # 验证至少有一种文件传递方式
             if not s3_key and not presigned_url:
@@ -216,7 +217,7 @@ class SimpleFileClassificationConsumer:
                 return
             
             # 处理文件分类 - 调用同步处理器
-            result = content_processor.process_file_content(file_content, file_type, f"single_file_{task_id}{file_type}")
+            result = content_processor.process_file_content(file_content, file_type, f"single_file_{task_id}{file_type}", model_type=model_type)
             
             if result and result.get("success") and result.get("category") != "未识别":
                 # 分类成功

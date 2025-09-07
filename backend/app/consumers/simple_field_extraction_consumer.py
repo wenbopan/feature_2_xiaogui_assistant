@@ -161,6 +161,7 @@ class SimpleFieldExtractionConsumer:
             file_type = job_data.file_type
             callback_url = job_data.callback_url
             delivery_method = job_data.delivery_method
+            model_type = job_data.model_type  # 提取模型类型
             
             # 验证至少有一种文件传递方式
             if not s3_key and not presigned_url:
@@ -217,11 +218,12 @@ class SimpleFieldExtractionConsumer:
             
             # 两阶段处理：先分类，再提取字段
             # 第一阶段：分类
-            from app.services.gemini_service import gemini_service
-            classification_result = gemini_service.classify_file_sync(
+            from app.services.llm_service import llm_service
+            classification_result = llm_service.classify_file_sync(
                 file_content, 
                 file_type, 
-                f"single_file_{task_id}{file_type}"
+                f"single_file_{task_id}{file_type}",
+                model_type
             )
             
             category = classification_result.get("category", "未识别")
@@ -232,7 +234,8 @@ class SimpleFieldExtractionConsumer:
                 file_content, 
                 file_type, 
                 f"single_file_{task_id}{file_type}",
-                category=category
+                category=category,
+                model_type=model_type
             )
             
             if result and result.get("success"):

@@ -218,7 +218,8 @@ async def _process_classification(
     presigned_url: Optional[str] = None,
     file_type: str = None,
     file_id: Optional[str] = None,
-    callback_url: Optional[str] = None
+    callback_url: Optional[str] = None,
+    model_type: Optional[str] = None
 ):
     """classification logic"""
     try:
@@ -241,7 +242,8 @@ async def _process_classification(
                 file_content=content,
                 file_type=file_type,
                 file_id=file_id,
-                callback_url=callback_url
+                callback_url=callback_url,
+                model_type=model_type
             )
         else:
             # 预签名URL方式
@@ -249,7 +251,8 @@ async def _process_classification(
                 presigned_url=presigned_url,
                 file_type=file_type,
                 file_id=file_id,
-                callback_url=callback_url
+                callback_url=callback_url,
+                model_type=model_type
             )
         
         # Return 200 OK for successful task publication
@@ -269,10 +272,11 @@ async def classify_single_file(
     file_type: str = Form(...),
     file_id: Optional[str] = Form(None),
     callback_url: Optional[str] = Form(None),
+    model_type: Optional[str] = Form(None),
     current_user: User = Depends(get_current_active_user)
 ):
     """Classify a single file immediately - supports both direct upload and presigned URL"""
-    return await _process_classification(file_content, presigned_url, file_type, file_id, callback_url)
+    return await _process_classification(file_content, presigned_url, file_type, file_id, callback_url, model_type)
 
 @router.post("/internal/files/classify")
 async def classify_single_file_internal(
@@ -280,10 +284,11 @@ async def classify_single_file_internal(
     presigned_url: Optional[str] = Form(None),
     file_type: str = Form(...),
     file_id: Optional[str] = Form(None),
-    callback_url: Optional[str] = Form(None)
+    callback_url: Optional[str] = Form(None),
+    model_type: Optional[str] = Form(None)
 ):
     """Internal API for file classification - no authentication required"""
-    return await _process_classification(file_content, presigned_url, file_type, file_id, callback_url)
+    return await _process_classification(file_content, presigned_url, file_type, file_id, callback_url, model_type)
 
 async def _process_extraction(
     file_content: Optional[UploadFile] = None,

@@ -123,6 +123,7 @@ class KafkaJobData(BaseModel):
     s3_key: str = Field(..., description="S3存储键")
     file_type: str = Field(..., description="文件类型")
     filename: str = Field(..., description="文件名")
+    model_type: Optional[str] = Field(None, description="AI模型类型")
 
 class FieldExtractionJobMessage(KafkaJobData):
     """字段提取任务消息"""
@@ -148,6 +149,7 @@ class SingleFileJobData(BaseModel):
     callback_url: Optional[str] = Field(None, description="回调URL")
     created_at: str = Field(..., description="创建时间")
     delivery_method: str = Field("minio", description="文件传递方式")
+    model_type: Optional[str] = Field(None, description="AI模型类型")
 
 class SingleFileClassificationJobData(SingleFileJobData):
     """单个文件分类任务数据"""

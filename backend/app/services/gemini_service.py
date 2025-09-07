@@ -1,323 +1,189 @@
-import google.generativeai as genai
+from google import genai
 from app.config import settings
 import logging
-from typing import Optional, Dict, Any, List
-import json
+from typing import Optional, Dict, Any
+import base64
+import os
+import tempfile
 
 logger = logging.getLogger(__name__)
 
+# File size thresholds
+GEMINI_INLINE_SIZE_LIMIT = 20 * 1024 * 1024  # 20MB in bytes
+
 class GeminiService:
-    """Gemini服务类"""
+    """Gemini服务类 - 使用现代google.genai库"""
     
     def __init__(self):
-        if not settings.gemini_api_key:
-            raise ValueError("Gemini API key is required")
+        # 优先从环境变量获取，如果没有则从配置获取
+        import os
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            from app.config import settings
+            api_key = settings.gemini_api_key
         
-        genai.configure(api_key=settings.gemini_api_key)
-        # 强制使用正确的模型名称，忽略环境变量中的错误设置
-        model_name = "gemini-1.5-flash"
-        logger.info(f"Gemini API configured with model: {model_name}")
-        self.model = genai.GenerativeModel(model_name)
-        self.categories = ["发票", "租赁协议", "变更/解除协议", "账单", "银行回单"]
+        if not api_key:
+            raise ValueError("Gemini API key is required. Please set GEMINI_API_KEY environment variable or configure it in settings")
         
-        logger.info("Gemini service initialized successfully")
+        # 使用现代google.genai库
+        self.client = genai.Client(api_key=api_key)
+        self.model_name = "gemini-2.5-flash"
+        
+        logger.info(f"Gemini API configured with model: {self.model_name}")
+        logger.info("Gemini service initialized successfully with modern google.genai library")
     
-    def _classify_file_sync(self, file_content: bytes, file_type: str, filename: str) -> Dict[str, Any]:
-        """分类文件 - 同步版本（在executor中运行）"""
+    def _should_use_file_api(self, file_content: bytes) -> bool:
+        """判断是否应该使用File API而不是内联数据"""
+        return len(file_content) > GEMINI_INLINE_SIZE_LIMIT
+    
+    def _upload_file_to_gemini(self, file_content: bytes, file_type: str, filename: str) -> str:
+        """上传文件到Gemini File API并返回文件URI"""
         try:
-            # 从配置中获取分类提示词
-            from app.config import CLASSIFICATION_PROMPT
-            prompt = CLASSIFICATION_PROMPT.format(filename=filename, file_type=file_type)
+            # 创建临时文件
+            with tempfile.NamedTemporaryFile(delete=False, suffix=file_type) as temp_file:
+                temp_file.write(file_content)
+                temp_file_path = temp_file.name
             
-            # 记录发送给Gemini的分类提示词（用于调试）
-            logger.info(f"=== GEMINI CLASSIFICATION PROMPT ===")
-            logger.info(f"Filename: {filename}")
-            logger.info(f"File type: {file_type}")
-            logger.info(f"Prompt length: {len(prompt)} characters")
-            logger.info(f"Full prompt:\n{prompt}")
-            logger.info("=== END GEMINI CLASSIFICATION PROMPT ===")
+            # 使用现代google.genai库上传文件
+            uploaded_file = self.client.files.upload(
+                path=temp_file_path,
+                mime_type=self._get_mime_type(file_type)
+            )
             
-            # 调用Gemini API - 统一使用视觉模型处理所有文件类型
-            if file_type.lower() in ['.jpg', '.jpeg', '.png', '.pdf']:
-                # 图片和PDF文件都使用多模态视觉模型
-                # 对于PDF，Gemini可以理解文档布局、表格、图表等
-                from google.generativeai.types import content_types
-                
-                # 根据文件类型设置正确的MIME类型
-                if file_type.lower() == '.pdf':
-                    mime_type = "application/pdf"
-                else:
-                    mime_type = f"image/{file_type[1:].lower()}"
-                
-                # 创建Blob对象 - 使用测试脚本中成功的方法
-                try:
-                    if hasattr(content_types, 'Blob'):
-                        blob = content_types.Blob(mime_type=mime_type, data=file_content)
-                    elif hasattr(content_types, 'BlobDict'):
-                        blob = content_types.BlobDict(mime_type=mime_type, data=file_content)
-                    else:
-                        # 降级到字典格式
-                        blob = {
-                            "mime_type": mime_type,
-                            "data": file_content
-                        }
-                        logger.info(f"Using dictionary format for blob creation")
-                except Exception as e:
-                    logger.error(f"Failed to create blob: {e}")
-                    # 最终降级到字典格式
-                    blob = {
-                        "mime_type": mime_type,
-                        "data": file_content
-                    }
-                
-                response = self.model.generate_content([prompt, blob])
-            else:
-                # 其他文本文件，尝试解码为文本
-                try:
-                    text_content = file_content.decode('utf-8')
-                    response = self.model.generate_content([prompt, text_content])
-                except UnicodeDecodeError:
-                    logger.warning(f"Cannot decode file content for {filename}")
-                    return {
-                        "category": "未识别",
-                        "confidence": 0.0,
-                        "reason": "文件内容无法解码为文本",
-                        "key_info": "",
-                        "raw_response": None
-                    }
+            # 清理临时文件
+            os.unlink(temp_file_path)
             
-            # 记录Gemini的原始响应
-            logger.info(f"Gemini raw response for {filename}: {response.text}")
-            
-            # 解析响应
-            result = self._parse_classification_response(response.text)
-            result["raw_response"] = response.text  # 添加原始响应
-            logger.info(f"File {filename} classified as {result.get('category', 'unknown')} with confidence {result.get('confidence', 0.0)}")
-            
-            return result
+            logger.info(f"File uploaded to Gemini File API: {uploaded_file.name}")
+            return uploaded_file.name
             
         except Exception as e:
-            logger.error(f"Failed to classify file {filename}: {e}")
-            return {
-                "category": "未识别",
-                "confidence": 0.0,
-                "reason": f"分类失败: {str(e)}",
-                "key_info": ""
-            }
+            logger.error(f"Failed to upload file to Gemini File API: {e}")
+            raise
     
-    def _extract_fields_sync(self, file_content: bytes, file_type: str, filename: str, category: str) -> Dict[str, Any]:
-        """提取字段 - 同步版本（在executor中运行）"""
+    def _get_mime_type(self, file_type: str) -> str:
+        """根据文件类型获取MIME类型"""
+        if file_type.lower() == '.pdf':
+            return "application/pdf"
+        elif file_type.lower() in ['.jpg', '.jpeg']:
+            return "image/jpeg"
+        elif file_type.lower() == '.png':
+            return "image/png"
+        elif file_type.lower() == '.webp':
+            return "image/webp"
+        elif file_type.lower() in ['.heic', '.heif']:
+            return f"image/{file_type[1:].lower()}"
+        else:
+            return "application/octet-stream"
+    
+    def _create_inline_data(self, file_content: bytes, file_type: str) -> str:
+        """创建内联数据（Base64编码）"""
+        return base64.b64encode(file_content).decode('utf-8')
+    
+    def _classify_file_sync(self, file_content: bytes, file_type: str, filename: str, prompt: str) -> Dict[str, Any]:
+        """分类文件 - 同步版本（仅API调用）"""
         try:
-            from app.config import build_extraction_prompt
-            from app.models.prompt_schemas import SUPPORTED_CATEGORIES
-            
-            # 验证分类参数
-            if not category or category.strip() == "":
-                raise ValueError("Category is required for field extraction")
-            
-            # 验证分类是否在支持的类别中
-            if category not in SUPPORTED_CATEGORIES:
-                raise ValueError(f"Unsupported category '{category}'. Supported categories: {SUPPORTED_CATEGORIES}")
-            
-            # 使用提供的分类信息
-            classification_confidence = 1.0  # 假设提供的分类是准确的
-            classification_reason = "使用提供的分类"
-            
-            if category == "未识别":
-                return {
-                    "category": "未识别",
-                    "classification_confidence": classification_confidence,
-                    "classification_reason": classification_reason,
-                    "extraction_data": {},
-                    "missing_fields": [],
-                    "extraction_confidence": 0.0,
-                    "notes": "文档类型未识别，无法进行字段提取"
-                }
-            
-            # 构建提取提示词
-            prompt = build_extraction_prompt(category)
-            
-            # 记录发送给Gemini的完整提示词（用于调试热交换功能）
-            logger.info(f"=== GEMINI FIELD EXTRACTION PROMPT FOR {category.upper()} ===")
-            logger.info(f"Filename: {filename}")
-            logger.info(f"File type: {file_type}")
-            logger.info(f"Prompt length: {len(prompt)} characters")
-            logger.info(f"Full prompt:\n{prompt}")
-            logger.info("=== END GEMINI FIELD EXTRACTION PROMPT ===")
-            
-            # 调用Gemini API - 完全参照内容分类的实现，统一使用视觉模型
-            if file_type.lower() in ['.jpg', '.jpeg', '.png', '.pdf']:
-                # 图片和PDF文件都使用多模态视觉模型
-                # 对于PDF，Gemini可以理解文档布局、表格、图表等
-                from google.generativeai.types import content_types
-                
-                # 根据文件类型设置正确的MIME类型
-                if file_type.lower() == '.pdf':
-                    mime_type = "application/pdf"
+            # 调用Gemini API - 根据文件大小选择处理方式
+            if file_type.lower() in ['.jpg', '.jpeg', '.png', '.pdf', '.webp', '.heic', '.heif']:
+                # 图片和PDF文件使用多模态视觉模型
+                if self._should_use_file_api(file_content):
+                    # 大文件使用File API
+                    logger.info(f"File {filename} is large ({len(file_content)} bytes), using File API")
+                    file_uri = self._upload_file_to_gemini(file_content, file_type, filename)
+                    response = self.client.models.generate_content(
+                        model=self.model_name,
+                        contents=[prompt, file_uri]
+                    )
                 else:
-                    mime_type = f"image/{file_type[1:].lower()}"
-                
-                # 创建Blob对象 - 使用和内容分类完全一致的方法
-                try:
-                    if hasattr(content_types, 'Blob'):
-                        blob = content_types.Blob(mime_type=mime_type, data=file_content)
-                    elif hasattr(content_types, 'BlobDict'):
-                        blob = content_types.BlobDict(mime_type=mime_type, data=file_content)
-                    else:
-                        # 降级到字典格式
-                        blob = {
-                            "mime_type": mime_type,
-                            "data": file_content
-                        }
-                        logger.info(f"Using dictionary format for blob creation in field extraction")
-                except Exception as e:
-                    logger.error(f"Failed to create blob for field extraction: {e}")
-                    # 最终降级到字典格式
-                    blob = {
-                        "mime_type": mime_type,
-                        "data": file_content
-                    }
-                
-                response = self.model.generate_content([prompt, blob])
+                    # 小文件使用内联数据
+                    logger.info(f"File {filename} is small ({len(file_content)} bytes), using inline data")
+                    mime_type = self._get_mime_type(file_type)
+                    
+                    # 使用现代google.genai库的内联数据格式
+                    from google.genai import types
+                    inline_data = types.Part.from_bytes(
+                        data=file_content,
+                        mime_type=mime_type
+                    )
+                    
+                    response = self.client.models.generate_content(
+                        model=self.model_name,
+                        contents=[prompt, inline_data]
+                    )
             else:
-                # 其他文本文件，尝试解码为文本
+                # 文本文件
                 try:
                     text_content = file_content.decode('utf-8')
-                    response = self.model.generate_content([prompt, text_content])
+                    response = self.client.models.generate_content(
+                        model=self.model_name,
+                        contents=[prompt, text_content]
+                    )
+                except UnicodeDecodeError:
+                    logger.warning(f"Cannot decode file content for classification from {filename}")
+                    return {
+                        "text": '{"category": "未识别", "confidence": 0.0, "reason": "文件内容无法解码为文本", "key_info": "无法处理此文件"}'
+                    }
+            
+            # 返回原始响应
+            return {"text": response.text}
+            
+        except Exception as e:
+            logger.error(f"Gemini classification API call failed for file {filename}: {e}")
+            return {
+                "text": f'{{"category": "未识别", "confidence": 0.0, "reason": "API调用失败: {str(e)}", "key_info": "无法处理此文件"}}'
+            }
+    
+    def _extract_fields_sync(self, file_content: bytes, file_type: str, filename: str, prompt: str) -> Dict[str, Any]:
+        """提取字段 - 同步版本（仅API调用）"""
+        try:
+            # 调用Gemini API - 根据文件大小选择处理方式
+            if file_type.lower() in ['.jpg', '.jpeg', '.png', '.pdf', '.webp', '.heic', '.heif']:
+                # 图片和PDF文件使用多模态视觉模型
+                if self._should_use_file_api(file_content):
+                    # 大文件使用File API
+                    logger.info(f"File {filename} is large ({len(file_content)} bytes), using File API for extraction")
+                    file_uri = self._upload_file_to_gemini(file_content, file_type, filename)
+                    response = self.client.models.generate_content(
+                        model=self.model_name,
+                        contents=[prompt, file_uri]
+                    )
+                else:
+                    # 小文件使用内联数据
+                    logger.info(f"File {filename} is small ({len(file_content)} bytes), using inline data for extraction")
+                    mime_type = self._get_mime_type(file_type)
+                    
+                    # 使用现代google.genai库的内联数据格式
+                    from google.genai import types
+                    inline_data = types.Part.from_bytes(
+                        data=file_content,
+                        mime_type=mime_type
+                    )
+                    
+                    response = self.client.models.generate_content(
+                        model=self.model_name,
+                        contents=[prompt, inline_data]
+                    )
+            else:
+                # 文本文件
+                try:
+                    text_content = file_content.decode('utf-8')
+                    response = self.client.models.generate_content(
+                        model=self.model_name,
+                        contents=[prompt, text_content]
+                    )
                 except UnicodeDecodeError:
                     logger.warning(f"Cannot decode file content for field extraction from {filename}")
                     return {
-                        "category": "未识别",
-                        "classification_confidence": 0.0,
-                        "classification_reason": "文件内容无法解码为文本",
-                        "extraction_data": {},
-                        "missing_fields": [],
-                        "extraction_confidence": 0.0,
-                        "error": "文件内容无法解码为文本"
+                        "text": '{"category": "未识别", "classification_confidence": 0.0, "classification_reason": "文件内容无法解码为文本", "extraction_data": {}, "missing_fields": [], "extraction_confidence": 0.0, "notes": "文件内容无法解码为文本"}'
                     }
             
-            # 记录Gemini的原始响应
-            logger.info(f"Gemini raw response for field extraction from {filename}: {response.text}")
-            
-            # 解析响应
-            result = self._parse_extraction_response(response.text)
-            
-            # 确保使用正确的分类信息
-            result["category"] = category
-            result["classification_confidence"] = classification_confidence
-            result["classification_reason"] = classification_reason
-            
-            logger.info(f"Fields extracted from {filename}, category: {category}")
-            
-            return result
+            # 返回原始响应
+            return {"text": response.text}
             
         except Exception as e:
-            logger.error(f"Field extraction failed for file {filename}: {e}")
+            logger.error(f"Gemini field extraction API call failed for file {filename}: {e}")
             return {
-                "category": "未识别",
-                "classification_confidence": 0.0,
-                "classification_reason": f"字段提取失败: {str(e)}",
-                "extraction_data": {},
-                "missing_fields": [],
-                "extraction_confidence": 0.0,
-                "error": f"字段提取失败: {str(e)}"
+                "text": f'{{"category": "未识别", "classification_confidence": 0.0, "classification_reason": "API调用失败: {str(e)}", "extraction_data": {{}}, "missing_fields": [], "extraction_confidence": 0.0, "notes": "API调用失败"}}'
             }
-    
-    def _get_field_config(self, category: str) -> Optional[Dict[str, Any]]:
-        """获取字段配置 - 从prompt_schemas中读取"""
-        from app.models.prompt_schemas import get_field_names_for_category, SUPPORTED_CATEGORIES
-        
-        if category in SUPPORTED_CATEGORIES and category != "未识别":
-            return {
-                "name": category,
-                "display_name": category,
-                "description": f"{category}文档",
-                "confidence_threshold": 0.6,
-                "extraction_fields": get_field_names_for_category(category)
-            }
-        
-        return None
-    
-    def _parse_classification_response(self, response_text: str) -> Dict[str, Any]:
-        """解析分类响应 - 使用Pydantic模型"""
-        from app.models.prompt_schemas import LLMResponseWrapper
-        
-        try:
-            wrapper = LLMResponseWrapper.from_raw_response(response_text, "classification")
-            
-            if wrapper.parsed_response:
-                return {
-                    "category": wrapper.parsed_response.category,
-                    "confidence": wrapper.parsed_response.confidence,
-                    "reason": wrapper.parsed_response.reason,
-                    "key_info": wrapper.parsed_response.key_info
-                }
-            else:
-                logger.warning(f"Failed to parse classification response: {wrapper.parse_error}")
-                return {
-                    "category": "未识别",
-                    "confidence": 0.0,
-                    "reason": f"解析失败: {wrapper.parse_error}",
-                    "key_info": response_text[:200] + "..." if len(response_text) > 200 else response_text
-                }
-                
-        except Exception as e:
-            logger.error(f"Error parsing classification response: {e}")
-            return {
-                "category": "未识别",
-                "confidence": 0.0,
-                "reason": f"解析失败: {str(e)}",
-                "key_info": ""
-            }
-    
-    def _parse_extraction_response(self, response_text: str) -> Dict[str, Any]:
-        """解析字段提取响应 - 使用Pydantic模型"""
-        from app.models.prompt_schemas import LLMResponseWrapper
-        
-        try:
-            wrapper = LLMResponseWrapper.from_raw_response(response_text, "extraction")
-            
-            if wrapper.parsed_response:
-                return {
-                    "category": wrapper.parsed_response.category,
-                    "classification_confidence": wrapper.parsed_response.classification_confidence,
-                    "classification_reason": wrapper.parsed_response.classification_reason,
-                    "extraction_data": wrapper.parsed_response.extraction_data,
-                    "missing_fields": wrapper.parsed_response.missing_fields,
-                    "extraction_confidence": wrapper.parsed_response.extraction_confidence,
-                    "notes": wrapper.parsed_response.notes
-                }
-            else:
-                logger.warning(f"Failed to parse extraction response: {wrapper.parse_error}")
-                return {
-                    "category": "未识别",
-                    "classification_confidence": 0.0,
-                    "classification_reason": f"解析失败: {wrapper.parse_error}",
-                    "extraction_data": {},
-                    "missing_fields": [],
-                    "extraction_confidence": 0.0,
-                    "notes": f"解析失败: {wrapper.parse_error}"
-                }
-                
-        except Exception as e:
-            logger.error(f"Error parsing extraction response: {e}")
-            return {
-                "category": "未识别",
-                "classification_confidence": 0.0,
-                "classification_reason": f"解析失败: {str(e)}",
-                "extraction_data": {},
-                "missing_fields": [],
-                "extraction_confidence": 0.0,
-                "notes": f"解析失败: {str(e)}"
-            }
-    
-    def classify_file_sync(self, file_content: bytes, file_type: str, filename: str) -> Dict[str, Any]:
-        """分类文件 - 同步版本（供同步消费者直接调用）"""
-        return self._classify_file_sync(file_content, file_type, filename)
-    
-    def extract_fields_sync(self, file_content: bytes, file_type: str, filename: str, category: str) -> Dict[str, Any]:
-        """提取字段 - 同步版本（供同步消费者直接调用）"""
-        return self._extract_fields_sync(file_content, file_type, filename, category)
 
 # 全局Gemini服务实例
 gemini_service = GeminiService()

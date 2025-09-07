@@ -18,9 +18,16 @@ class Settings(BaseSettings):
     kafka_bootstrap_servers: str = "localhost:9092"
     kafka_topic_prefix: str = "legal"
     
-    # Gemini 配置 - Must be set via environment variable for security
-    gemini_api_key: str = ""  # Will be set via environment variable
+    # Gemini 配置 - 优先从环境变量读取，如果没有则使用默认值
+    gemini_api_key: str = ""  # 默认值，可通过环境变量GEMINI_API_KEY覆盖
     gemini_model: str = "gemini-1.5-flash"
+    
+    # Qwen 配置 - 优先从环境变量读取，如果没有则使用默认值
+    qwen_api_key: str = ""  # 默认值，可通过环境变量QWEN_API_KEY覆盖
+    qwen_model: str = "qwen-vl-plus"
+    
+    # LLM 默认模型配置
+    llm_default_model: str = "qwen"  # Default to Qwen for China deployment
     
     # 数据库配置 - Production defaults for containerized deployment
     database_url: str = "postgresql://panwenbo:@localhost:5432/legal_docs_dev"
