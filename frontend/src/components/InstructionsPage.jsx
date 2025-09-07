@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { API_ENDPOINTS, getBackendInfo } from '../config/api'
+import { useAuth } from '../contexts/AuthContext'
 import './InstructionsPage.css'
 
 function InstructionsPage() {
+  const { getAuthHeaders } = useAuth()
   const [instructions, setInstructions] = useState({
     '发票': '',
     '租赁协议': '',
@@ -32,7 +34,12 @@ function InstructionsPage() {
       setIsLoading(true)
       setError(null)
       
-      const response = await fetch(API_ENDPOINTS.INSTRUCTIONS)
+      const response = await fetch(API_ENDPOINTS.INSTRUCTIONS, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        }
+      })
       if (!response.ok) {
         throw new Error(`Failed to load instructions: ${response.status}`)
       }
@@ -83,7 +90,8 @@ function InstructionsPage() {
       const response = await fetch(API_ENDPOINTS.INSTRUCTIONS_HOT_SWAP, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
         },
         body: JSON.stringify(instructions)
       })
@@ -128,7 +136,8 @@ function InstructionsPage() {
       const response = await fetch(API_ENDPOINTS.INSTRUCTIONS_RESET, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
         }
       })
       
