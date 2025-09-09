@@ -109,3 +109,4 @@ docker-images/
 
 # Deployment scripts for local builds
 deploy/build_from_local_images.sh
+deploy/env.template

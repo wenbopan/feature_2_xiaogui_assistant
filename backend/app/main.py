@@ -81,6 +81,29 @@ async def lifespan(app: FastAPI):
         logger.error("Instructions are critical for document processing. Application cannot start without them.")
         raise
     
+    # 验证API密钥配置（强依赖）
+    try:
+        logger.info("Validating API key configuration...")
+        
+        # 检查Gemini API Key
+        if not settings.gemini_api_key or settings.gemini_api_key.strip() == "":
+            raise ValueError("GEMINI_API_KEY is not set or empty")
+        
+        # 检查Qwen API Key
+        if not settings.qwen_api_key or settings.qwen_api_key.strip() == "":
+            raise ValueError("QWEN_API_KEY is not set or empty")
+        
+        logger.info("API key configuration validation passed")
+        logger.info(f"Using LLM model: {settings.llm_default_model}")
+        logger.info(f"Gemini model: {settings.gemini_model}")
+        logger.info(f"Qwen model: {settings.qwen_model}")
+            
+    except Exception as e:
+        logger.error(f"API key validation failed: {e}")
+        logger.error("API keys are critical for AI processing. Application cannot start without valid API keys.")
+        logger.error("Please set GEMINI_API_KEY and QWEN_API_KEY environment variables.")
+        raise
+    
     # 启动Kafka服务（强依赖）
     try:
         await kafka_service.connect()
