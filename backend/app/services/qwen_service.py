@@ -29,7 +29,8 @@ class QwenService:
         # 使用OpenAI兼容的客户端
         self.client = OpenAI(
             api_key=api_key,
-            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"  # Qwen的OpenAI兼容端点
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",  # Qwen的OpenAI兼容端点
+            timeout=60
         )
         self.model_name = "qwen-vl-plus"
         

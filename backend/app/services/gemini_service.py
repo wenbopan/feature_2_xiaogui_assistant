@@ -3,8 +3,6 @@ from app.config import settings
 import logging
 from typing import Optional, Dict, Any
 import base64
-import os
-import tempfile
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +24,7 @@ class GeminiService:
             raise ValueError("Gemini API key is required. Please set GEMINI_API_KEY environment variable or configure it in settings")
         
         # 使用现代google.genai库
-        self.client = genai.Client(api_key=api_key)
+        self.client = genai.Client(api_key=api_key, http_options={"timeout": 60})
         self.model_name = "gemini-2.5-flash"
         
         logger.info(f"Gemini API configured with model: {self.model_name}")
