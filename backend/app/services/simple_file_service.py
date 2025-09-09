@@ -28,7 +28,7 @@ class SimpleFileService:
         file_content: bytes,
         file_type: str,
         file_id: Optional[str] = None,
-        callback_url: Optional[str] = None,
+        update_file_callback: Optional[dict] = None,
         model_type: Optional[str] = None
     ) -> Dict[str, Any]:
         """创建单个文件分类任务 - 上传到MinIO，发送S3 key到Kafka"""
@@ -70,7 +70,7 @@ class SimpleFileService:
                     "file_id": file_id,  # Frontend-provided file ID
                     "s3_key": s3_key,  # MinIO S3 key
                     "file_type": file_type,
-                    "callback_url": callback_url,
+                    "update_file_callback": update_file_callback,  # New callback structure
                     "created_at": datetime.now().isoformat(),
                     "delivery_method": "minio",
                     "model_type": model_type or "qwen"  # 默认使用qwen
@@ -85,7 +85,7 @@ class SimpleFileService:
                     "status": "created",
                     "message": "Single file classification task created successfully",
                     "s3_key": s3_key,
-                    "callback_url": callback_url,
+                    "update_file_callback": update_file_callback,
                     "delivery_method": "minio"
                 }
                 
@@ -103,13 +103,13 @@ class SimpleFileService:
     
     async def create_single_file_classification_task_from_url(
         self,
-        presigned_url: str,
+        oss_url: str,
         file_type: str,
         file_id: Optional[str] = None,
-        callback_url: Optional[str] = None,
+        update_file_callback: Optional[dict] = None,
         model_type: Optional[str] = None
     ) -> Dict[str, Any]:
-        """从预签名URL创建单个文件分类任务"""
+        """从OSS URL创建单个文件分类任务"""
         try:
             logger.info(f"Creating single file classification task from URL for file type: {file_type}")
             
@@ -118,23 +118,23 @@ class SimpleFileService:
                 raise ValueError(f"Unsupported file type: {file_type}")
             
             # 验证URL格式
-            if not presigned_url.startswith(('http://', 'https://')):
-                raise ValueError("Invalid presigned URL format")
+            if not oss_url.startswith(('http://', 'https://')):
+                raise ValueError("Invalid OSS URL format")
             
             # 生成唯一的任务ID
             task_id = str(uuid.uuid4())
             
-            # 创建Kafka消息 - 包含预签名URL
+            # 创建Kafka消息 - 包含OSS URL
             message = {
                 "type": "single_file_classification_job",
                 "job_id": str(uuid.uuid4()),
                 "task_id": task_id,
                 "file_id": file_id,  # Frontend-provided file ID
-                "presigned_url": presigned_url,  # 预签名URL
+                "oss_url": oss_url,  # OSS URL
                 "file_type": file_type,
-                "callback_url": callback_url,
+                "update_file_callback": update_file_callback,  # New callback structure
                 "created_at": datetime.now().isoformat(),
-                "delivery_method": "presigned_url",
+                "delivery_method": "oss_url",
                 "model_type": model_type or "qwen"  # 默认使用qwen
             }
             
@@ -146,9 +146,9 @@ class SimpleFileService:
                 "task_id": task_id,
                 "status": "created",
                 "message": "Single file classification task created successfully from URL",
-                "presigned_url": presigned_url,
-                "callback_url": callback_url,
-                "delivery_method": "presigned_url"
+                "oss_url": oss_url,
+                "update_file_callback": update_file_callback,
+                "delivery_method": "oss_url"
             }
                     
         except Exception as e:
@@ -160,7 +160,7 @@ class SimpleFileService:
         file_content: bytes,
         file_type: str,
         file_id: Optional[str] = None,
-        callback_url: Optional[str] = None
+        extract_file_callback: Optional[dict] = None
     ) -> Dict[str, Any]:
         """创建单个文件字段提取任务 - 上传到MinIO，发送S3 key到Kafka"""
         try:
@@ -201,7 +201,7 @@ class SimpleFileService:
                     "file_id": file_id,  # Frontend-provided file ID
                     "s3_key": s3_key,  # MinIO S3 key
                     "file_type": file_type,
-                    "callback_url": callback_url,
+                    "extract_file_callback": extract_file_callback,  # New callback structure
                     "created_at": datetime.now().isoformat(),
                     "delivery_method": "minio"
                 }
@@ -215,7 +215,7 @@ class SimpleFileService:
                     "status": "created",
                     "message": "Single file extraction task created successfully",
                     "s3_key": s3_key,
-                    "callback_url": callback_url,
+                    "extract_file_callback": extract_file_callback,
                     "delivery_method": "minio"
                 }
                 
@@ -233,12 +233,12 @@ class SimpleFileService:
     
     async def create_single_file_extraction_task_from_url(
         self,
-        presigned_url: str,
+        oss_url: str,
         file_type: str,
         file_id: Optional[str] = None,
-        callback_url: Optional[str] = None
+        extract_file_callback: Optional[dict] = None
     ) -> Dict[str, Any]:
-        """从预签名URL创建单个文件字段提取任务"""
+        """从OSS URL创建单个文件字段提取任务"""
         try:
             logger.info(f"Creating single file extraction task from URL for file type: {file_type}")
             
@@ -247,23 +247,23 @@ class SimpleFileService:
                 raise ValueError(f"Unsupported file type: {file_type}")
             
             # 验证URL格式
-            if not presigned_url.startswith(('http://', 'https://')):
-                raise ValueError("Invalid presigned URL format")
+            if not oss_url.startswith(('http://', 'https://')):
+                raise ValueError("Invalid OSS URL format")
             
             # 生成唯一的任务ID
             task_id = str(uuid.uuid4())
             
-            # 创建Kafka消息 - 包含预签名URL
+            # 创建Kafka消息 - 包含OSS URL
             message = {
                 "type": "single_file_extraction_job",
                 "job_id": str(uuid.uuid4()),
                 "task_id": task_id,
                 "file_id": file_id,  # Frontend-provided file ID
-                "presigned_url": presigned_url,  # 预签名URL
+                "oss_url": oss_url,  # OSS URL
                 "file_type": file_type,
-                "callback_url": callback_url,
+                "extract_file_callback": extract_file_callback,  # New callback structure
                 "created_at": datetime.now().isoformat(),
-                "delivery_method": "presigned_url"
+                "delivery_method": "oss_url"
             }
             
             # 发送到Kafka
@@ -274,9 +274,9 @@ class SimpleFileService:
                 "task_id": task_id,
                 "status": "created",
                 "message": "Single file extraction task created successfully from URL",
-                "presigned_url": presigned_url,
-                "callback_url": callback_url,
-                "delivery_method": "presigned_url"
+                "oss_url": oss_url,
+                "extract_file_callback": extract_file_callback,
+                "delivery_method": "oss_url"
             }
                     
         except Exception as e:

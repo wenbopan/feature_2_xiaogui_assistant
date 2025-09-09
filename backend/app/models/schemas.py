@@ -146,7 +146,6 @@ class SingleFileJobData(BaseModel):
     task_id: str = Field(..., description="任务ID (UUID)")
     file_id: Optional[str] = Field(None, description="前端提供的文件ID")
     file_type: str = Field(..., description="文件类型")
-    callback_url: Optional[str] = Field(None, description="回调URL")
     created_at: str = Field(..., description="创建时间")
     delivery_method: str = Field("minio", description="文件传递方式")
     model_type: Optional[str] = Field(None, description="AI模型类型")
@@ -155,28 +154,30 @@ class SingleFileClassificationJobData(SingleFileJobData):
     """单个文件分类任务数据"""
     type: str = Field("single_file_classification_job", description="消息类型")
     s3_key: Optional[str] = Field(None, description="MinIO S3存储键")
-    presigned_url: Optional[str] = Field(None, description="预签名URL")
+    oss_url: Optional[str] = Field(None, description="OSS URL")
+    update_file_callback: Optional[Dict[str, Any]] = Field(None, description="文件分类回调配置")
     
-    @field_validator('s3_key', 'presigned_url')
+    @field_validator('s3_key', 'oss_url')
     @classmethod
     def validate_delivery_method(cls, v, values):
         """验证至少有一种文件传递方式"""
-        if not v and not values.data.get('presigned_url') and not values.data.get('s3_key'):
-            raise ValueError("Either s3_key or presigned_url must be provided")
+        if not v and not values.data.get('oss_url') and not values.data.get('s3_key'):
+            raise ValueError("Either s3_key or oss_url must be provided")
         return v
 
 class SingleFileExtractionJobData(SingleFileJobData):
     """单个文件字段提取任务数据"""
     type: str = Field("single_file_extraction_job", description="消息类型")
     s3_key: Optional[str] = Field(None, description="MinIO S3存储键")
-    presigned_url: Optional[str] = Field(None, description="预签名URL")
+    oss_url: Optional[str] = Field(None, description="OSS URL")
+    extract_file_callback: Optional[Dict[str, Any]] = Field(None, description="文件提取回调配置")
     
-    @field_validator('s3_key', 'presigned_url')
+    @field_validator('s3_key', 'oss_url')
     @classmethod
     def validate_delivery_method(cls, v, values):
         """验证至少有一种文件传递方式"""
-        if not v and not values.data.get('presigned_url') and not values.data.get('s3_key'):
-            raise ValueError("Either s3_key or presigned_url must be provided")
+        if not v and not values.data.get('oss_url') and not values.data.get('s3_key'):
+            raise ValueError("Either s3_key or oss_url must be provided")
         return v
 
 class SingleFileKafkaMessage(BaseModel):

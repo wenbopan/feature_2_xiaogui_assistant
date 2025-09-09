@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 
 from app.config import settings, ensure_directories, instructions_manager
 from app.models.database import create_tables
-from app.api import api
+from app.api import common_api, batch_api, single_file_api
 from app.services.kafka_service import kafka_service
 from app.consumers import kafka_consumer_service, field_extraction_consumer, simple_file_classification_consumer, simple_field_extraction_consumer
 from app.services.minio_service import minio_service
@@ -245,7 +245,9 @@ app.add_middleware(
 )
 
 # 注册路由
-app.include_router(api.router, prefix="/api")
+app.include_router(common_api.router, prefix="/api")
+app.include_router(batch_api.router, prefix="/api")
+app.include_router(single_file_api.router, prefix="/api")
 
 # 全局异常处理
 @app.exception_handler(Exception)

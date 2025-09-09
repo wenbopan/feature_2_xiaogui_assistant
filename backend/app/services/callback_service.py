@@ -14,6 +14,7 @@ from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 from enum import Enum
+from jinja2 import Template, Environment, select_autoescape
 from app.proto.file_types import get_file_type_enum, get_category_name
 
 logger = logging.getLogger(__name__)
@@ -333,6 +334,93 @@ class CallbackService:
         
         logger.info(f"Sending extract_file_callback_sync: file_id={file_id}, is_extracted={is_extracted}, fields_count={len(file_content)}")
         return self.send_callback_sync(callback_url, payload, callback_id, timeout)
+    
+    def send_custom_classify_file_callback_sync(
+        self,
+        update_file_callback: Dict[str, Any],
+        file_id: str,
+        file_category: str,
+        is_recognized: int,
+        callback_id: Optional[str] = None,
+        timeout: int = 30
+    ) -> str:
+        """发送自定义文件分类回调 (同步版本) - 使用Jinja2模板替换
+        支持的占位符: ${file_category}, ${is_recognized}
+        保持客户端原始请求体的所有其他键值对
+        """
+        try:
+            callback_url = update_file_callback["url"]
+            callback_body_template = update_file_callback["body"]
+            
+            # 将中文分类名转换为FileType枚举值
+            file_type_enum = get_file_type_enum(file_category)
+            
+            # 使用Jinja2进行模板替换，配置使用${}语法
+            env = Environment(
+                autoescape=select_autoescape(['html', 'xml']),
+                enable_async=False,
+                variable_start_string='${',
+                variable_end_string='}'
+            )
+            
+            # 直接处理模板字典，确保数据类型正确
+            payload = {}
+            for key, value in callback_body_template.items():
+                if value == "${file_category}":
+                    payload[key] = file_type_enum  # 使用枚举值 (0-4)
+                elif value == "${is_recognized}":
+                    payload[key] = is_recognized
+                else:
+                    payload[key] = value  # 保持原始值
+            
+            logger.info(f"Sending custom classify_file_callback: file_id={file_id}, file_category={file_type_enum}, is_recognized={is_recognized}")
+            return self.send_callback_sync(callback_url, payload, callback_id, timeout)
+            
+        except Exception as e:
+            logger.error(f"Failed to send custom classify_file_callback: {e}")
+            raise
+    
+    def send_custom_extract_file_callback_sync(
+        self,
+        extract_file_callback: Dict[str, Any],
+        file_id: str,
+        file_content: Dict[str, Any],
+        is_extracted: int,
+        callback_id: Optional[str] = None,
+        timeout: int = 30
+    ) -> str:
+        """发送自定义文件提取回调 (同步版本) - 使用Jinja2模板替换
+        支持的占位符: ${file_content}, ${is_extracted}
+        保持客户端原始请求体的所有其他键值对
+        """
+        try:
+            callback_url = extract_file_callback["url"]
+            callback_body_template = extract_file_callback["body"]
+            
+            # 使用Jinja2进行模板替换，配置使用${}语法
+            env = Environment(
+                autoescape=select_autoescape(['html', 'xml']),
+                enable_async=False,
+                variable_start_string='${',
+                variable_end_string='}'
+            )
+            
+            # 直接处理模板字典，确保file_content保持为字典
+            payload = {}
+            for key, value in callback_body_template.items():
+                if value == "${file_content}":
+                    payload[key] = file_content  # 直接使用字典，不进行字符串化
+                elif value == "${is_extracted}":
+                    payload[key] = is_extracted
+                else:
+                    payload[key] = value  # 保持原始值
+            
+            logger.info(f"Sending custom extract_file_callback: file_id={file_id}, is_extracted={is_extracted}, fields_count={len(file_content)}")
+            return self.send_callback_sync(callback_url, payload, callback_id, timeout)
+            
+        except Exception as e:
+            logger.error(f"Failed to send custom extract_file_callback: {e}")
+            raise
 
 # 创建全局实例
 callback_service = CallbackService()

@@ -18,6 +18,8 @@ function SingleFileE2ETest() {
   const [currentFileId, setCurrentFileId] = useState('')
   const [customFileId, setCustomFileId] = useState('')
   const [lastResultCount, setLastResultCount] = useState(0)
+  const [ossUrl, setOssUrl] = useState('')
+  const [useOssUrl, setUseOssUrl] = useState(false)
 
   const handleFileSelect = (e) => {
     const file = e.target.files[0]
@@ -29,6 +31,8 @@ function SingleFileE2ETest() {
       setCurrentFileId('')
       setCustomFileId('')
       setLastResultCount(0)
+      setOssUrl('')
+      setUseOssUrl(false)
     }
   }
 
@@ -55,6 +59,8 @@ function SingleFileE2ETest() {
       setCurrentFileId('')
       setCustomFileId('')
       setLastResultCount(0)
+      setOssUrl('')
+      setUseOssUrl(false)
     }
   }
 
@@ -67,6 +73,8 @@ function SingleFileE2ETest() {
     setCurrentFileId('')
     setCustomFileId('')
     setLastResultCount(0)
+    setOssUrl('')
+    setUseOssUrl(false)
     
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
@@ -104,12 +112,29 @@ function SingleFileE2ETest() {
           setLastResultCount(currentCount)
           
           // Convert all results to display format
-          const newCallbackData = result.results.map(callbackResult => ({
-            id: `${callbackResult.type}_${callbackResult.timestamp}`,
-            type: callbackResult.type,
-            timestamp: callbackResult.timestamp,
-            data: callbackResult.data
-          }))
+          const newCallbackData = result.results.map(callbackResult => {
+            let processedData = callbackResult.data
+            
+            // If file_content is a stringified JSON, parse it for better display
+            if (processedData.file_content && typeof processedData.file_content === 'string') {
+              try {
+                processedData = {
+                  ...processedData,
+                  file_content: JSON.parse(processedData.file_content)
+                }
+              } catch (e) {
+                // If parsing fails, keep the original string
+                console.warn('Failed to parse file_content JSON:', e)
+              }
+            }
+            
+            return {
+              id: `${callbackResult.type}_${callbackResult.timestamp}`,
+              type: callbackResult.type,
+              timestamp: callbackResult.timestamp,
+              data: processedData
+            }
+          })
           
           setCallbackData(newCallbackData)
           
@@ -187,7 +212,19 @@ function SingleFileE2ETest() {
       classifyFormData.append('file_content', selectedFile)
       classifyFormData.append('file_type', getFileExtension(selectedFile.name))
       classifyFormData.append('file_id', fileId)
-      classifyFormData.append('callback_url', API_ENDPOINTS.CALLBACK_CLASSIFY)
+      
+      // Create custom callback structure for classification
+      const updateFileCallback = {
+        url: API_ENDPOINTS.CALLBACK_CLASSIFY,
+        body: {
+          file_id: fileId,
+          file_category: "${file_category}",
+          is_recognized: "${is_recognized}",
+          timestamp: new Date().toISOString(),
+          test_type: "classification_e2e"
+        }
+      }
+      classifyFormData.append('update_file_callback', JSON.stringify(updateFileCallback))
 
       const classifyResponse = await authenticatedPostForm(API_ENDPOINTS.CLASSIFY, classifyFormData)
 
@@ -244,7 +281,19 @@ function SingleFileE2ETest() {
       extractFormData.append('file_content', selectedFile)
       extractFormData.append('file_type', getFileExtension(selectedFile.name))
       extractFormData.append('file_id', fileId)
-      extractFormData.append('callback_url', API_ENDPOINTS.CALLBACK_EXTRACT)
+      
+      // Create custom callback structure for extraction
+      const extractFileCallback = {
+        url: API_ENDPOINTS.CALLBACK_EXTRACT,
+        body: {
+          file_id: fileId,
+          file_content: "${file_content}",
+          is_extracted: "${is_extracted}",
+          timestamp: new Date().toISOString(),
+          test_type: "extraction_e2e"
+        }
+      }
+      extractFormData.append('extract_file_callback', JSON.stringify(extractFileCallback))
 
       const extractResponse = await authenticatedPostForm(API_ENDPOINTS.EXTRACT_FIELDS, extractFormData)
 
@@ -269,7 +318,129 @@ function SingleFileE2ETest() {
     }
   }
 
+  const handleClassifyWithOssUrl = async () => {
+    if (!ossUrl.trim()) {
+      setError('Please enter an OSS URL')
+      return
+    }
 
+    try {
+      setIsLoading(true)
+      setError(null)
+      setSuccess(null)
+      
+      const fileId = currentFileId || generateFileId()
+      setCurrentFileId(fileId)
+      
+      const currentCount = callbackData.length
+      setLastResultCount(currentCount)
+      
+      setProcessingStep('Step 1: Sending OSS URL for classification...')
+
+      // Step 1: Send OSS URL for classification
+      const classifyFormData = new FormData()
+      classifyFormData.append('oss_url', ossUrl.trim())
+      classifyFormData.append('file_type', 'pdf') // Assume PDF for OSS URL test
+      classifyFormData.append('file_id', fileId)
+      
+      // Create custom callback structure for classification
+      const updateFileCallback = {
+        url: API_ENDPOINTS.CALLBACK_CLASSIFY,
+        body: {
+          file_id: fileId,
+          oss_url: ossUrl.trim(),
+          file_category: "${file_category}",
+          is_recognized: "${is_recognized}",
+          timestamp: new Date().toISOString(),
+          test_type: "classification_oss_e2e"
+        }
+      }
+      classifyFormData.append('update_file_callback', JSON.stringify(updateFileCallback))
+
+      const classifyResponse = await authenticatedPostForm(API_ENDPOINTS.CLASSIFY, classifyFormData)
+
+      if (!classifyResponse.ok) {
+        throw new Error(`Classification failed: ${classifyResponse.status}`)
+      }
+
+      const classifyData = await classifyResponse.json()
+      
+      setProcessingStep('Step 2: Waiting for classification callback...')
+      setSuccess('OSS URL sent for classification! Waiting for callback...')
+      
+      // Start polling for callback result (non-blocking)
+      pollForCallback(fileId)
+      
+    } catch (err) {
+      console.error('Classification error:', err)
+      setError(`Classification failed: ${err.message}`)
+      setProcessingStep('')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleExtractWithOssUrl = async () => {
+    if (!ossUrl.trim()) {
+      setError('Please enter an OSS URL')
+      return
+    }
+
+    try {
+      setIsLoading(true)
+      setError(null)
+      setSuccess(null)
+      
+      const fileId = currentFileId || generateFileId()
+      setCurrentFileId(fileId)
+      
+      const currentCount = callbackData.length
+      setLastResultCount(currentCount)
+      
+      setProcessingStep('Step 1: Sending OSS URL for field extraction...')
+
+      // Step 1: Send OSS URL for extraction
+      const extractFormData = new FormData()
+      extractFormData.append('oss_url', ossUrl.trim())
+      extractFormData.append('file_type', 'pdf') // Assume PDF for OSS URL test
+      extractFormData.append('file_id', fileId)
+      
+      // Create custom callback structure for extraction
+      const extractFileCallback = {
+        url: API_ENDPOINTS.CALLBACK_EXTRACT,
+        body: {
+          file_id: fileId,
+          oss_url: ossUrl.trim(),
+          file_content: "${file_content}",
+          is_extracted: "${is_extracted}",
+          timestamp: new Date().toISOString(),
+          test_type: "extraction_oss_e2e"
+        }
+      }
+      extractFormData.append('extract_file_callback', JSON.stringify(extractFileCallback))
+
+      const extractResponse = await authenticatedPostForm(API_ENDPOINTS.EXTRACT_FIELDS, extractFormData)
+
+      if (!extractResponse.ok) {
+        throw new Error(`Extraction failed: ${extractResponse.status}`)
+      }
+
+      const extractData = await extractResponse.json()
+      
+      setProcessingStep('Step 2: Waiting for extraction callback...')
+      setSuccess('OSS URL sent for extraction! Waiting for callback...')
+      
+      // Start polling for callback result (non-blocking)
+      pollForCallback(fileId)
+      
+    } catch (err) {
+      console.error('Extraction error:', err)
+      setError(`Field extraction failed: ${err.message}`)
+      setProcessingStep('')
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const formatTimestamp = (timestamp) => {
     // Convert Unix timestamp (seconds) to milliseconds for JavaScript Date
@@ -282,6 +453,10 @@ function SingleFileE2ETest() {
 
   const getCallbackTypeColor = (type) => {
     return type === 'classification' ? '#3b82f6' : '#10b981'
+  }
+
+  const renderCallbackData = (data) => {
+    return <pre className="json-display">{JSON.stringify(data, null, 2)}</pre>
   }
 
   return (
@@ -371,29 +546,90 @@ function SingleFileE2ETest() {
           </div>
         </div>
 
+        {/* OSS URL Input */}
+        <div className="oss-url-section">
+          <div className="oss-url-container">
+            <div className="oss-url-header">
+              <label htmlFor="ossUrlInput" className="oss-url-label">
+                OSS URL (Alternative to file upload):
+              </label>
+              <div className="oss-url-toggle">
+                <input
+                  type="checkbox"
+                  id="useOssUrl"
+                  checked={useOssUrl}
+                  onChange={(e) => setUseOssUrl(e.target.checked)}
+                />
+                <label htmlFor="useOssUrl">Use OSS URL instead of file upload</label>
+              </div>
+            </div>
+            {useOssUrl && (
+              <div className="oss-url-input-group">
+                <input
+                  type="url"
+                  id="ossUrlInput"
+                  value={ossUrl}
+                  onChange={(e) => setOssUrl(e.target.value)}
+                  placeholder="https://example.com/path/to/file.pdf"
+                  className="oss-url-input"
+                />
+                <button
+                  type="button"
+                  onClick={() => setOssUrl('')}
+                  className="clear-oss-url-btn"
+                  disabled={isLoading}
+                >
+                  Clear
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Action Buttons */}
         <div className="action-buttons">
-          <button 
-            onClick={handleClassifyE2E}
-            disabled={!selectedFile || isLoading}
-            className="action-btn classify-btn"
-          >
-            🏷️ Classify E2E
-          </button>
-          <button 
-            onClick={handleExtractE2E}
-            disabled={!selectedFile || isLoading}
-            className="action-btn extract-btn"
-          >
-            📊 Extract E2E
-          </button>
-          <button 
-            onClick={handleClear}
-            disabled={isLoading}
-            className="action-btn clear-btn"
-          >
-            🗑️ Clear
-          </button>
+          <div className="file-upload-buttons">
+            <button 
+              onClick={handleClassifyE2E}
+              disabled={!selectedFile || isLoading}
+              className="action-btn classify-btn"
+            >
+              🏷️ Classify E2E
+            </button>
+            <button 
+              onClick={handleExtractE2E}
+              disabled={!selectedFile || isLoading}
+              className="action-btn extract-btn"
+            >
+              📊 Extract E2E
+            </button>
+            <button 
+              onClick={handleClear}
+              disabled={isLoading}
+              className="action-btn clear-btn"
+            >
+              🗑️ Clear
+            </button>
+          </div>
+          
+          {useOssUrl && (
+            <div className="oss-url-buttons">
+              <button 
+                onClick={handleClassifyWithOssUrl}
+                disabled={!ossUrl.trim() || isLoading}
+                className="action-btn classify-oss-btn"
+              >
+                🌐 Classify OSS E2E
+              </button>
+              <button 
+                onClick={handleExtractWithOssUrl}
+                disabled={!ossUrl.trim() || isLoading}
+                className="action-btn extract-oss-btn"
+              >
+                🌐 Extract OSS E2E
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Processing Status */}
@@ -449,7 +685,7 @@ function SingleFileE2ETest() {
                     </span>
                   </div>
                   <div className="callback-content">
-                    <pre>{JSON.stringify(callback.data, null, 2)}</pre>
+                    {renderCallbackData(callback.data)}
                   </div>
                 </div>
               ))}
@@ -460,7 +696,7 @@ function SingleFileE2ETest() {
         {/* Footer */}
         <div className="test-footer">
           <div className="status-info">
-            <span className="status-indicator">✅ Connected</span>
+            <span className="status-text">Connected</span>
             <span>Backend: {getBackendInfo().host}:{getBackendInfo().port}</span>
             <span>E2E Tests: {callbackData.length}</span>
           </div>

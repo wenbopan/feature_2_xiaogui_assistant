@@ -157,40 +157,40 @@ class SimpleFileClassificationConsumer:
             job_id = job_data.job_id
             file_id = job_data.file_id
             s3_key = job_data.s3_key
-            presigned_url = job_data.presigned_url
+            oss_url = job_data.oss_url
             file_type = job_data.file_type
-            callback_url = job_data.callback_url
+            update_file_callback = job_data.update_file_callback
             delivery_method = job_data.delivery_method
             model_type = job_data.model_type  # 提取模型类型
             
             # 验证至少有一种文件传递方式
-            if not s3_key and not presigned_url:
-                error_msg = "Neither s3_key nor presigned_url provided in message"
+            if not s3_key and not oss_url:
+                error_msg = "Neither s3_key nor oss_url provided in message"
                 logger.error(error_msg)
-                if callback_url:
-                    self._send_error_callback(callback_url, file_id, task_id, job_id, error_msg)
+                if update_file_callback:
+                    self._send_error_callback(update_file_callback, file_id, task_id, job_id, error_msg)
                 return
             
             logger.info(f"Processing single file classification job {job_id} for task {task_id} via {delivery_method}")
             
             # 根据传递方式获取文件内容
-            if delivery_method == "presigned_url" and presigned_url:
-                # 从预签名URL下载文件内容
+            if delivery_method == "oss_url" and oss_url:
+                # 从OSS URL下载文件内容
                 try:
                     import requests
                     
-                    response = requests.get(presigned_url, timeout=30)
+                    response = requests.get(oss_url, timeout=30)
                     if response.status_code == 200:
                         file_content = response.content
-                        logger.info(f"Downloaded file from presigned URL: {len(file_content)} bytes")
+                        logger.info(f"Downloaded file from OSS URL: {len(file_content)} bytes")
                     else:
                         raise Exception(f"HTTP {response.status_code}")
                         
                 except Exception as e:
-                    error_msg = f"Failed to download file from presigned URL: {e}"
+                    error_msg = f"Failed to download file from OSS URL: {e}"
                     logger.error(error_msg)
-                    if callback_url:
-                        self._send_error_callback(callback_url, file_id, task_id, job_id, error_msg)
+                    if update_file_callback:
+                        self._send_error_callback(update_file_callback, file_id, task_id, job_id, error_msg)
                     return
             elif delivery_method == "minio" and s3_key:
                 # 从MinIO下载文件内容
@@ -199,21 +199,21 @@ class SimpleFileClassificationConsumer:
                     if not file_content:
                         error_msg = f"Failed to get file content from MinIO: {s3_key}"
                         logger.error(error_msg)
-                        if callback_url:
-                            self._send_error_callback(callback_url, task_id, job_id, error_msg)
+                        if update_file_callback:
+                            self._send_error_callback(update_file_callback, file_id, task_id, job_id, error_msg)
                         return
                     logger.info(f"Downloaded file from MinIO: {len(file_content)} bytes")
                 except Exception as e:
                     error_msg = f"Failed to download file from MinIO: {e}"
                     logger.error(error_msg)
-                    if callback_url:
-                        self._send_error_callback(callback_url, file_id, task_id, job_id, error_msg)
+                    if update_file_callback:
+                        self._send_error_callback(update_file_callback, file_id, task_id, job_id, error_msg)
                     return
             else:
                 error_msg = f"Invalid delivery method or missing content: {delivery_method}"
                 logger.error(error_msg)
-                if callback_url:
-                    self._send_error_callback(callback_url, file_id, task_id, job_id, error_msg)
+                if update_file_callback:
+                    self._send_error_callback(update_file_callback, file_id, task_id, job_id, error_msg)
                 return
             
             # 处理文件分类 - 调用同步处理器
@@ -227,8 +227,8 @@ class SimpleFileClassificationConsumer:
                 logger.info(f"Single file classification completed for job {job_id}: {result}")
                 
                 # 发送成功回调 - 使用新的预定义格式
-                if callback_url:
-                    self._send_success_callback(callback_url, file_id, category, is_recognized)
+                if update_file_callback:
+                    self._send_success_callback(update_file_callback, file_id, category, is_recognized)
                     
             else:
                 # 分类失败或未识别
@@ -238,8 +238,8 @@ class SimpleFileClassificationConsumer:
                 logger.warning(f"File classification failed or unrecognized: {result}")
                 
                 # 发送失败回调 - 使用新的预定义格式
-                if callback_url:
-                    self._send_success_callback(callback_url, file_id, category, is_recognized)
+                if update_file_callback:
+                    self._send_success_callback(update_file_callback, file_id, category, is_recognized)
                 
         except Exception as e:
             error_msg = f"Error handling single file classification job: {e}"
@@ -248,22 +248,37 @@ class SimpleFileClassificationConsumer:
             # 尝试发送错误回调 - 使用新的预定义格式
             try:
                 data = message_data.get("data", {})
-                callback_url = data.get("callback_url")
+                update_file_callback = data.get("update_file_callback")
                 
-                if callback_url:
+                if update_file_callback:
                     # 发送失败回调
                     category = "unknown"
                     is_recognized = 0  # 未识别
-                    self._send_success_callback(callback_url, file_id, category, is_recognized)
+                    self._send_success_callback(update_file_callback, file_id, category, is_recognized)
             except:
                 pass
     
-    def _send_success_callback(self, callback_url: str, file_id: str, category: str, is_recognized: int):
-        """发送成功回调 - 使用预定义格式"""
+    def _send_error_callback(self, update_file_callback: dict, file_id: str, task_id: str, job_id: str, error_msg: str):
+        """发送错误回调"""
         try:
-            # 使用新的同步回调方法
-            callback_service.send_classify_file_callback_sync(callback_url, file_id, category, is_recognized)
-            logger.info(f"Success callback sent to: {callback_url}")
+            if update_file_callback:
+                # 使用新的自定义回调方法
+                callback_service.send_custom_classify_file_callback_sync(
+                    update_file_callback, file_id, "unknown", 0
+                )
+                logger.info(f"Error callback sent to: {update_file_callback.get('url', 'unknown')}")
+        except Exception as e:
+            logger.error(f"Failed to send error callback: {e}")
+    
+    def _send_success_callback(self, update_file_callback: dict, file_id: str, category: str, is_recognized: int):
+        """发送成功回调 - 使用自定义格式"""
+        try:
+            if update_file_callback:
+                # 使用新的自定义回调方法
+                callback_service.send_custom_classify_file_callback_sync(
+                    update_file_callback, file_id, category, is_recognized
+                )
+                logger.info(f"Success callback sent to: {update_file_callback.get('url', 'unknown')}")
         except Exception as e:
             logger.error(f"Failed to send success callback: {e}")
     

@@ -106,3 +106,6 @@ postgres-*.tar
 minio-*.tar
 redpanda-*.tar
 docker-images/
+
+# Deployment scripts for local builds
+deploy/build_from_local_images.sh
