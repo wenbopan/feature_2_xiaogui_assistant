@@ -85,6 +85,11 @@ async def classify_single_file(
     Callback placeholders: ${file_category}, ${is_recognized}
     """
     import json
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    logger.info(f"🔍 API received classification request - model_type: {model_type}, file_type: {file_type}")
+    
     callback_dict = None
     if update_file_callback:
         try:
@@ -119,7 +124,8 @@ async def _process_extraction(
     oss_url: Optional[str] = None,
     file_type: str = None,
     file_id: Optional[str] = None,
-    extract_file_callback: Optional[dict] = None
+    extract_file_callback: Optional[dict] = None,
+    model_type: Optional[str] = None
 ):
     """Common extraction logic """
     try:
@@ -142,7 +148,8 @@ async def _process_extraction(
                 file_content=content,
                 file_type=file_type,
                 file_id=file_id,
-                extract_file_callback=extract_file_callback
+                extract_file_callback=extract_file_callback,
+                model_type=model_type
             )
         else:
             # OSS URL方式
@@ -150,7 +157,8 @@ async def _process_extraction(
                 oss_url=oss_url,
                 file_type=file_type,
                 file_id=file_id,
-                extract_file_callback=extract_file_callback
+                extract_file_callback=extract_file_callback,
+                model_type=model_type
             )
         
         # Return 200 OK for successful task publication
@@ -170,6 +178,7 @@ async def extract_fields_single_file(
     file_type: str = Form(...),
     file_id: Optional[str] = Form(None),
     extract_file_callback: Optional[str] = Form(None),
+    model_type: Optional[str] = Form(None),
     current_user: User = Depends(get_current_active_user)
 ):
     """Extract fields from a single file immediately - supports both direct upload and OSS URL
@@ -177,6 +186,11 @@ async def extract_fields_single_file(
     Callback placeholders: ${file_content}, ${is_extracted}
     """
     import json
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    logger.info(f"🔍 API received extraction request - model_type: {model_type}, file_type: {file_type}")
+    
     callback_dict = None
     if extract_file_callback:
         try:
@@ -184,7 +198,7 @@ async def extract_fields_single_file(
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid extract_file_callback JSON format")
     
-    return await _process_extraction(file_content, oss_url, file_type, file_id, callback_dict)
+    return await _process_extraction(file_content, oss_url, file_type, file_id, callback_dict, model_type)
 
 @router.post("/internal/files/extract-fields")
 async def extract_fields_single_file_internal(
@@ -192,7 +206,8 @@ async def extract_fields_single_file_internal(
     oss_url: Optional[str] = Form(None),
     file_type: str = Form(...),
     file_id: Optional[str] = Form(None),
-    extract_file_callback: Optional[str] = Form(None)
+    extract_file_callback: Optional[str] = Form(None),
+    model_type: Optional[str] = Form(None)
 ):
     """Internal API for field extraction - no authentication required"""
     import json
@@ -203,7 +218,7 @@ async def extract_fields_single_file_internal(
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid extract_file_callback JSON format")
     
-    return await _process_extraction(file_content, oss_url, file_type, file_id, callback_dict)
+    return await _process_extraction(file_content, oss_url, file_type, file_id, callback_dict, model_type)
 
 @router.post("/files/view-content", response_model=FileContentResponse)
 async def get_file_content(

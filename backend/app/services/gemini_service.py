@@ -39,19 +39,18 @@ class GeminiService:
     def _upload_file_to_gemini(self, file_content: bytes, file_type: str, filename: str) -> str:
         """上传文件到Gemini File API并返回文件URI"""
         try:
-            # 创建临时文件
-            with tempfile.NamedTemporaryFile(delete=False, suffix=file_type) as temp_file:
-                temp_file.write(file_content)
-                temp_file_path = temp_file.name
+            # 创建BytesIO对象来包装文件内容
+            import io
+            file_obj = io.BytesIO(file_content)
             
-            # 使用现代google.genai库上传文件
+            # 使用现代google.genai库上传文件 - 传递IOBase对象和配置
             uploaded_file = self.client.files.upload(
-                path=temp_file_path,
-                mime_type=self._get_mime_type(file_type)
+                file=file_obj,
+                config={
+                    "mime_type": self._get_mime_type(file_type),
+                    "display_name": filename
+                }
             )
-            
-            # 清理临时文件
-            os.unlink(temp_file_path)
             
             logger.info(f"File uploaded to Gemini File API: {uploaded_file.name}")
             return uploaded_file.name

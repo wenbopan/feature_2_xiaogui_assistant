@@ -14,6 +14,7 @@ from datetime import datetime
 
 from app.services.kafka_service import kafka_service
 from app.services.minio_service import minio_service
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -33,14 +34,14 @@ class SimpleFileService:
     ) -> Dict[str, Any]:
         """创建单个文件分类任务 - 上传到MinIO，发送S3 key到Kafka"""
         try:
-            logger.info(f"Creating single file classification task for file type: {file_type}")
+            logger.info(f"Creating single file classification task for file type: {file_type}, model_type: {model_type}")
             
             # 验证文件类型
             if not self._validate_file_type(file_type):
                 raise ValueError(f"Unsupported file type: {file_type}")
             
-            # 验证文件大小 (MinIO upload limit: 10MB)
-            max_size = 10 * 1024 * 1024  # 10MB
+            # 验证文件大小 (使用配置文件中的限制)
+            max_size = settings.max_file_size  # 100MB from config
             if len(file_content) > max_size:
                 raise ValueError(f"File too large: {len(file_content)} bytes. Maximum size: {max_size} bytes")
             
@@ -160,18 +161,19 @@ class SimpleFileService:
         file_content: bytes,
         file_type: str,
         file_id: Optional[str] = None,
-        extract_file_callback: Optional[dict] = None
+        extract_file_callback: Optional[dict] = None,
+        model_type: Optional[str] = None
     ) -> Dict[str, Any]:
         """创建单个文件字段提取任务 - 上传到MinIO，发送S3 key到Kafka"""
         try:
-            logger.info(f"Creating single file extraction task for file type: {file_type}")
+            logger.info(f"Creating single file extraction task for file type: {file_type}, model_type: {model_type}")
             
             # 验证文件类型
             if not self._validate_file_type(file_type):
                 raise ValueError(f"Unsupported file type: {file_type}")
             
-            # 验证文件大小 (MinIO upload limit: 10MB)
-            max_size = 10 * 1024 * 1024  # 10MB
+            # 验证文件大小 (使用配置文件中的限制)
+            max_size = settings.max_file_size  # 100MB from config
             if len(file_content) > max_size:
                 raise ValueError(f"File too large: {len(file_content)} bytes. Maximum size: {max_size} bytes")
             
@@ -203,7 +205,8 @@ class SimpleFileService:
                     "file_type": file_type,
                     "extract_file_callback": extract_file_callback,  # New callback structure
                     "created_at": datetime.now().isoformat(),
-                    "delivery_method": "minio"
+                    "delivery_method": "minio",
+                    "model_type": model_type or "qwen"  # 默认使用qwen
                 }
                 
                 # 发送到Kafka
@@ -236,7 +239,8 @@ class SimpleFileService:
         oss_url: str,
         file_type: str,
         file_id: Optional[str] = None,
-        extract_file_callback: Optional[dict] = None
+        extract_file_callback: Optional[dict] = None,
+        model_type: Optional[str] = None
     ) -> Dict[str, Any]:
         """从OSS URL创建单个文件字段提取任务"""
         try:
@@ -263,7 +267,8 @@ class SimpleFileService:
                 "file_type": file_type,
                 "extract_file_callback": extract_file_callback,  # New callback structure
                 "created_at": datetime.now().isoformat(),
-                "delivery_method": "oss_url"
+                "delivery_method": "oss_url",
+                "model_type": model_type or "qwen"  # 默认使用qwen
             }
             
             # 发送到Kafka

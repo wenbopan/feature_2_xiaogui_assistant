@@ -20,6 +20,7 @@ function SingleFileE2ETest() {
   const [lastResultCount, setLastResultCount] = useState(0)
   const [ossUrl, setOssUrl] = useState('')
   const [useOssUrl, setUseOssUrl] = useState(false)
+  const [selectedModel, setSelectedModel] = useState('gemini') // 'gemini' or 'qwen'
 
   const handleFileSelect = (e) => {
     const file = e.target.files[0]
@@ -33,6 +34,7 @@ function SingleFileE2ETest() {
       setLastResultCount(0)
       setOssUrl('')
       setUseOssUrl(false)
+      setSelectedModel('gemini')
     }
   }
 
@@ -61,6 +63,7 @@ function SingleFileE2ETest() {
       setLastResultCount(0)
       setOssUrl('')
       setUseOssUrl(false)
+      setSelectedModel('gemini')
     }
   }
 
@@ -152,28 +155,30 @@ function SingleFileE2ETest() {
     }
   }
 
-  const pollForCallback = (fileId, maxAttempts = 30) => {
+  const pollForCallback = (fileId, maxAttempts = 20) => {
     let attempts = 0
     
     const poll = async () => {
       attempts++
+      console.log(`Polling attempt ${attempts}/${maxAttempts} for fileId: ${fileId}`)
+      
       const found = await checkCallbackResult(fileId)
       
       // If we found results, we can stop polling for this specific operation
-      // But we might want to continue polling for additional results
-      // For now, let's stop after finding results to avoid timeout messages
       if (found) {
+        console.log(`Callback result found after ${attempts} attempts`)
         return // Stop polling when we find results
       }
       
       // Only stop if we've reached max attempts
       if (attempts >= maxAttempts) {
-        setError('Timeout waiting for callback result')
+        console.error(`Timeout after ${attempts} attempts (${maxAttempts * 6} seconds)`)
+        setError(`Timeout waiting for callback result after ${maxAttempts * 6} seconds. Please check the backend logs.`)
         return
       }
       
-      // Wait 2 seconds before next check
-      setTimeout(poll, 2000)
+      // Wait 6 seconds before next check
+      setTimeout(poll, 6000)
     }
     
     // Start polling
@@ -205,13 +210,14 @@ function SingleFileE2ETest() {
       const currentCount = callbackData.length
       setLastResultCount(currentCount)
       
-      setProcessingStep('Step 1: Sending file for classification...')
+      setProcessingStep(`Step 1: Sending file for classification using ${selectedModel === 'gemini' ? 'Gemini' : 'Qwen'}...`)
 
       // Step 1: Send for classification
       const classifyFormData = new FormData()
       classifyFormData.append('file_content', selectedFile)
       classifyFormData.append('file_type', getFileExtension(selectedFile.name))
       classifyFormData.append('file_id', fileId)
+      classifyFormData.append('model_type', selectedModel)
       
       // Create custom callback structure for classification
       const updateFileCallback = {
@@ -221,7 +227,7 @@ function SingleFileE2ETest() {
           file_category: "${file_category}",
           is_recognized: "${is_recognized}",
           timestamp: new Date().toISOString(),
-          test_type: "classification_e2e"
+          test_type: `classification_e2e_${selectedModel}`
         }
       }
       classifyFormData.append('update_file_callback', JSON.stringify(updateFileCallback))
@@ -274,13 +280,14 @@ function SingleFileE2ETest() {
       const currentCount = callbackData.length
       setLastResultCount(currentCount)
       
-      setProcessingStep('Step 1: Sending file for field extraction...')
+      setProcessingStep(`Step 1: Sending file for field extraction using ${selectedModel === 'gemini' ? 'Gemini' : 'Qwen'}...`)
 
       // Step 1: Send for extraction
       const extractFormData = new FormData()
       extractFormData.append('file_content', selectedFile)
       extractFormData.append('file_type', getFileExtension(selectedFile.name))
       extractFormData.append('file_id', fileId)
+      extractFormData.append('model_type', selectedModel)
       
       // Create custom callback structure for extraction
       const extractFileCallback = {
@@ -290,7 +297,7 @@ function SingleFileE2ETest() {
           file_content: "${file_content}",
           is_extracted: "${is_extracted}",
           timestamp: new Date().toISOString(),
-          test_type: "extraction_e2e"
+          test_type: `extraction_e2e_${selectedModel}`
         }
       }
       extractFormData.append('extract_file_callback', JSON.stringify(extractFileCallback))
@@ -335,13 +342,14 @@ function SingleFileE2ETest() {
       const currentCount = callbackData.length
       setLastResultCount(currentCount)
       
-      setProcessingStep('Step 1: Sending OSS URL for classification...')
+      setProcessingStep(`Step 1: Sending OSS URL for classification using ${selectedModel === 'gemini' ? 'Gemini' : 'Qwen'}...`)
 
       // Step 1: Send OSS URL for classification
       const classifyFormData = new FormData()
       classifyFormData.append('oss_url', ossUrl.trim())
       classifyFormData.append('file_type', 'pdf') // Assume PDF for OSS URL test
       classifyFormData.append('file_id', fileId)
+      classifyFormData.append('model_type', selectedModel)
       
       // Create custom callback structure for classification
       const updateFileCallback = {
@@ -352,7 +360,7 @@ function SingleFileE2ETest() {
           file_category: "${file_category}",
           is_recognized: "${is_recognized}",
           timestamp: new Date().toISOString(),
-          test_type: "classification_oss_e2e"
+          test_type: `classification_oss_e2e_${selectedModel}`
         }
       }
       classifyFormData.append('update_file_callback', JSON.stringify(updateFileCallback))
@@ -397,13 +405,14 @@ function SingleFileE2ETest() {
       const currentCount = callbackData.length
       setLastResultCount(currentCount)
       
-      setProcessingStep('Step 1: Sending OSS URL for field extraction...')
+      setProcessingStep(`Step 1: Sending OSS URL for field extraction using ${selectedModel === 'gemini' ? 'Gemini' : 'Qwen'}...`)
 
       // Step 1: Send OSS URL for extraction
       const extractFormData = new FormData()
       extractFormData.append('oss_url', ossUrl.trim())
       extractFormData.append('file_type', 'pdf') // Assume PDF for OSS URL test
       extractFormData.append('file_id', fileId)
+      extractFormData.append('model_type', selectedModel)
       
       // Create custom callback structure for extraction
       const extractFileCallback = {
@@ -414,7 +423,7 @@ function SingleFileE2ETest() {
           file_content: "${file_content}",
           is_extracted: "${is_extracted}",
           timestamp: new Date().toISOString(),
-          test_type: "extraction_oss_e2e"
+          test_type: `extraction_oss_e2e_${selectedModel}`
         }
       }
       extractFormData.append('extract_file_callback', JSON.stringify(extractFileCallback))
@@ -543,6 +552,35 @@ function SingleFileE2ETest() {
                 <span className="current-id-value">{currentFileId}</span>
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Model Selection */}
+        <div className="model-selection-section">
+          <div className="model-selection-container">
+            <label htmlFor="modelSelect" className="model-selection-label">
+              Backend Model:
+            </label>
+            <div className="model-selection-group">
+              <select
+                id="modelSelect"
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                className="model-select"
+                disabled={isLoading}
+              >
+                <option value="gemini">🤖 Gemini (Google)</option>
+                <option value="qwen">🧠 Qwen (Alibaba)</option>
+              </select>
+              <div className="model-info">
+                <span className="model-description">
+                  {selectedModel === 'gemini' 
+                    ? 'Google\'s multimodal AI model - good for general document processing'
+                    : 'Alibaba\'s Qwen model - optimized for Chinese documents and PDF processing'
+                  }
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -698,6 +736,7 @@ function SingleFileE2ETest() {
           <div className="status-info">
             <span className="status-text">Connected</span>
             <span>Backend: {getBackendInfo().host}:{getBackendInfo().port}</span>
+            <span>Model: {selectedModel === 'gemini' ? '🤖 Gemini' : '🧠 Qwen'}</span>
             <span>E2E Tests: {callbackData.length}</span>
           </div>
         </div>
