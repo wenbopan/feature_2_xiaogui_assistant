@@ -3,7 +3,6 @@ from app.config import settings
 import logging
 from typing import Optional, Dict, Any
 import base64
-
 logger = logging.getLogger(__name__)
 
 # File size thresholds

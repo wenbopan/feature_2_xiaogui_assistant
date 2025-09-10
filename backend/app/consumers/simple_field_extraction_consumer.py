@@ -46,7 +46,11 @@ class SimpleFieldExtractionConsumer:
                 key_deserializer=lambda m: m.decode('utf-8') if m else None,
                 auto_offset_reset='earliest',
                 enable_auto_commit=True,
-                group_id="legal_docs_consumers"
+                group_id="legal_docs_consumers",
+                session_timeout_ms=120000,  # 2 minutes - longer than Gemini timeout
+                heartbeat_interval_ms=10000,  # 10 seconds - more responsive than 30s
+                max_poll_interval_ms=180000,  # 3 minutes - max time between polls
+                request_timeout_ms=130000  # 2 minutes 10 seconds - must be > session_timeout_ms
             )
             logger.debug(f"Consumer created successfully: {self.consumer}")
             
@@ -93,7 +97,7 @@ class SimpleFieldExtractionConsumer:
             while self.running:
                 try:
                     # 同步消费消息
-                    message = self.consumer.poll(timeout_ms=1000)
+                    message = self.consumer.poll(timeout_ms=5000)  # 5 seconds - increased from 1 second
                     if not message:
                         continue
                     
